@@ -289,8 +289,102 @@ def _extract_transcript_from_watch_page(video_id):
     return result
 
 
+def _extract_via_invidious(video_id):
+    """Fetch captions through maintained public Invidious instances.
+
+    This is a fallback for cloud hosts whose IP is blocked by YouTube itself.
+    The instance list is taken from the official Invidious documentation.
+    """
+    from urllib.parse import quote
+
+    instances = [
+        "https://inv.nadeko.net",
+        "https://invidious.nerdvpn.de",
+        "https://yt.chocolatemoo53.com",
+        "https://invidious.tiekoetter.com",
+    ]
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/122.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/vtt,application/json,text/plain,*/*",
+    }
+    failures = []
+
+    for instance in instances:
+        try:
+            # The documented endpoint without lang returns the available tracks.
+            meta = requests.get(
+                f"{instance}/api/v1/captions/{quote(video_id)}",
+                headers=headers,
+                timeout=7,
+            )
+            if meta.status_code != 200:
+                failures.append(f"{instance}: HTTP {meta.status_code}")
+                continue
+
+            payload = meta.json()
+            tracks = payload.get("captions", []) if isinstance(payload, dict) else []
+            if not tracks:
+                failures.append(f"{instance}: no caption tracks")
+                continue
+
+            def rank(track):
+                language = str(
+                    track.get("languageCode")
+                    or track.get("language_code")
+                    or ""
+                ).lower()
+                english = language.startswith("en")
+                return (0 if english else 1, language)
+
+            tracks = sorted(tracks, key=rank)
+            # Try English first, then the first available language.
+            for track in tracks:
+                language = (
+                    track.get("languageCode")
+                    or track.get("language_code")
+                )
+                if not language:
+                    continue
+                caption = requests.get(
+                    f"{instance}/api/v1/captions/{quote(video_id)}",
+                    params={"lang": language},
+                    headers=headers,
+                    timeout=9,
+                )
+                if caption.status_code != 200:
+                    continue
+
+                body = caption.text or ""
+                # The documented lang endpoint returns WebVTT.
+                if "WEBVTT" not in body[:300].upper() and not re.search(
+                    r"\d{2}:\d{2}(?:\.\d{3})?\s+-->", body
+                ):
+                    continue
+
+                transcript = clean_transcript(body)
+                if len(transcript.split()) >= 8:
+                    return transcript
+
+            failures.append(f"{instance}: tracks listed but no usable caption returned")
+        except Exception as exc:
+            failures.append(f"{instance}: {type(exc).__name__}: {str(exc)[:100]}")
+
+    raise RuntimeError(
+        "INVIDIOUS_FALLBACK_FAILED: " + " | ".join(failures[:4])
+    )
+
+
 def extract_transcript(video_id):
-    """Use the same current 1.x fetch interface as the earlier working app."""
+    """Fetch captions using YouTube first, then an Invidious fallback.
+
+    Streamlit Cloud IPs may be blocked directly by YouTube. In that case,
+    the app tries the official Invidious public-instance list before asking
+    the learner to paste or upload a transcript.
+    """
     from youtube_transcript_api import YouTubeTranscriptApi
 
     def snippets_to_text(snippets):
@@ -304,14 +398,13 @@ def extract_transcript(video_id):
         return clean_transcript(" ".join(parts))
 
     try:
-        # IMPORTANT: 1.x API first. Do not call the removed 0.6.x method first.
         fetched = YouTubeTranscriptApi().fetch(
             video_id, languages=["en", "en-US", "en-GB"]
         )
         transcript = snippets_to_text(fetched)
-        if transcript:
+        if len(transcript.split()) >= 8:
             return transcript
-        raise RuntimeError("YouTube returned an empty caption track.")
+        raise RuntimeError("YouTube returned an empty or very short caption track.")
 
     except Exception as exc:
         message = f"{type(exc).__name__}: {exc}"
@@ -320,23 +413,39 @@ def extract_transcript(video_id):
             "requestblocked", "ipblocked", "ip blocked",
             "blocking requests from your ip", "too many requests",
             "http 429", "status code 429", "http 403", "status code 403",
+            "sign in to confirm you're not a bot",
         )
-        if any(marker in lowered for marker in blocked_markers):
-            raise RuntimeError(
-                "YOUTUBE_REQUEST_BLOCKED: YouTube is refusing caption requests "
-                "from the Streamlit Cloud server. The video URL may be valid. "
-                "The original 1.x fetch method has been restored; if this error "
-                "continues, YouTube is blocking the hosting IP."
-            ) from exc
+        is_blocked = any(marker in lowered for marker in blocked_markers)
 
-        # Only try this fallback for non-IP errors; never repeat a blocked request.
+        # On cloud-IP blocks, try independent, publicly listed Invidious
+        # instances. Do not repeat the same direct YouTube request.
+        if is_blocked:
+            try:
+                return _extract_via_invidious(video_id)
+            except Exception as fallback_exc:
+                raise RuntimeError(
+                    "YOUTUBE_AND_FALLBACK_BLOCKED: YouTube blocked the Streamlit "
+                    "Cloud IP, and the public transcript fallback could not fetch "
+                    "captions. Try again later or use the transcript upload/paste "
+                    "option. Details: "
+                    f"{type(fallback_exc).__name__}: {fallback_exc}"
+                ) from fallback_exc
+
+        # For non-IP errors, inspect the watch page once as a final direct fallback.
         try:
             return _extract_transcript_from_watch_page(video_id)
         except Exception as fallback_exc:
+            # If the watch page is also blocked, try Invidious as well.
+            fallback_text = str(fallback_exc).lower()
+            if any(marker in fallback_text for marker in blocked_markers):
+                try:
+                    return _extract_via_invidious(video_id)
+                except Exception as invidious_exc:
+                    fallback_exc = invidious_exc
+
             raise RuntimeError(
-                "CAPTIONS_UNAVAILABLE: The transcript API and watch-page fallback "
-                "could not retrieve captions. Check whether captions are enabled "
-                "and the video is public. API error: "
+                "CAPTIONS_UNAVAILABLE: Caption retrieval failed. Check whether "
+                "the video is public and has captions. API error: "
                 f"{message}. Fallback error: "
                 f"{type(fallback_exc).__name__}: {fallback_exc}"
             ) from fallback_exc
@@ -1050,9 +1159,9 @@ elif page == "Video Learning":
                 except Exception as exc:
                     error_text = str(exc)
                     if "YOUTUBE_REQUEST_BLOCKED" in error_text or "YOUTUBE_CLOUD_BLOCK" in error_text:
-                        st.error("YouTube is blocking caption requests from the Streamlit Cloud server. Your video link is valid; this is a hosting restriction, not a language or URL problem.")
+                        st.error("YouTube blocked the Streamlit Cloud request, and the alternate caption services could not retrieve this video. Your URL was recognised; this is a server-access restriction.")
                     else:
-                        st.warning("No usable caption track was returned. Captions may be disabled, unavailable in the selected language, or restricted by YouTube.")
+                        st.warning("No usable caption track was returned. Captions may be disabled, unavailable, or restricted by the video provider.")
                     st.markdown("**Use the reliable transcript input below:** open the video on YouTube → select **Show transcript** → copy the transcript → paste it into the transcript box, or save it as a `.txt`, `.srt`, or `.vtt` file and upload it.")
                     st.caption("The app will process pasted or uploaded transcript text without making another YouTube request.")
         elif not text and not url.strip():
