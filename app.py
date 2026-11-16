@@ -290,88 +290,57 @@ def _extract_transcript_from_watch_page(video_id):
 
 
 def extract_transcript(video_id):
-    """Retrieve captions using the library first and a watch-page fallback.
-
-    The app supports youtube-transcript-api 0.6.x and 1.x. It makes a single
-    attempt per method and reports IP restrictions accurately. If the hosting
-    provider's IP is blocked by YouTube, no Python-only retry can guarantee access.
-    """
+    """Use the same current 1.x fetch interface as the earlier working app."""
     from youtube_transcript_api import YouTubeTranscriptApi
 
     def snippets_to_text(snippets):
         parts = []
         for item in snippets:
-            if hasattr(item, "text"):
-                value = item.text
-            elif isinstance(item, dict):
-                value = item.get("text", "")
-            else:
-                value = ""
+            value = item.text if hasattr(item, "text") else (
+                item.get("text", "") if isinstance(item, dict) else ""
+            )
             if value:
                 parts.append(str(value))
         return clean_transcript(" ".join(parts))
 
-    def is_blocked(exc):
-        message = f"{type(exc).__name__}: {exc}".lower()
-        return any(marker in message for marker in (
-            "requestblocked", "ip blocked", "blocking requests from your ip",
-            "too many requests", "http 429", "status code 429",
-            "forbidden", "http 403", "status code 403",
-        ))
-
-    errors = []
-    blocked_seen = False
-
-    # Preferred path: legacy requests-based interface (pinned in requirements).
-    legacy_get = getattr(YouTubeTranscriptApi, "get_transcript", None)
-    if callable(legacy_get):
-        try:
-            snippets = legacy_get(video_id, languages=["en", "en-US", "en-GB"])
-            transcript = snippets_to_text(snippets)
-            if transcript:
-                return transcript
-            errors.append("The English caption track was empty.")
-        except Exception as exc:
-            blocked_seen = blocked_seen or is_blocked(exc)
-            errors.append(f"Transcript library: {type(exc).__name__}: {exc}")
-
-    # Try the public watch page once. This can succeed when only the library
-    # endpoint is unavailable; it will also clearly identify a host-level block.
     try:
-        return _extract_transcript_from_watch_page(video_id)
-    except Exception as exc:
-        blocked_seen = blocked_seen or is_blocked(exc) or "YOUTUBE_REQUEST_BLOCKED" in str(exc)
-        errors.append(f"Watch-page fallback: {type(exc).__name__}: {exc}")
-
-    # Compatibility for 1.x, only if present and earlier methods did not succeed.
-    if not blocked_seen:
-        try:
-            api = YouTubeTranscriptApi()
-            fetch = getattr(api, "fetch", None)
-            if callable(fetch):
-                snippets = fetch(video_id, languages=["en", "en-US", "en-GB"])
-                transcript = snippets_to_text(snippets)
-                if transcript:
-                    return transcript
-                errors.append("The English caption track was empty.")
-        except Exception as exc:
-            blocked_seen = blocked_seen or is_blocked(exc)
-            errors.append(f"Current transcript API: {type(exc).__name__}: {exc}")
-
-    if blocked_seen:
-        raise RuntimeError(
-            "YOUTUBE_REQUEST_BLOCKED: YouTube is refusing automated caption requests "
-            "from this hosting server. The video URL may be valid; this is a server/IP "
-            "restriction. Use the transcript paste or TXT/SRT/VTT upload option, or "
-            "run the app from a network that YouTube permits."
+        # IMPORTANT: 1.x API first. Do not call the removed 0.6.x method first.
+        fetched = YouTubeTranscriptApi().fetch(
+            video_id, languages=["en", "en-US", "en-GB"]
         )
+        transcript = snippets_to_text(fetched)
+        if transcript:
+            return transcript
+        raise RuntimeError("YouTube returned an empty caption track.")
 
-    detail = " | ".join(errors[-3:])
-    raise RuntimeError(
-        "CAPTIONS_UNAVAILABLE: No caption track could be retrieved for this video. "
-        "Captions may be disabled, unavailable in the requested language, or restricted. "
-        + detail
-    )
+    except Exception as exc:
+        message = f"{type(exc).__name__}: {exc}"
+        lowered = message.lower()
+        blocked_markers = (
+            "requestblocked", "ipblocked", "ip blocked",
+            "blocking requests from your ip", "too many requests",
+            "http 429", "status code 429", "http 403", "status code 403",
+        )
+        if any(marker in lowered for marker in blocked_markers):
+            raise RuntimeError(
+                "YOUTUBE_REQUEST_BLOCKED: YouTube is refusing caption requests "
+                "from the Streamlit Cloud server. The video URL may be valid. "
+                "The original 1.x fetch method has been restored; if this error "
+                "continues, YouTube is blocking the hosting IP."
+            ) from exc
+
+        # Only try this fallback for non-IP errors; never repeat a blocked request.
+        try:
+            return _extract_transcript_from_watch_page(video_id)
+        except Exception as fallback_exc:
+            raise RuntimeError(
+                "CAPTIONS_UNAVAILABLE: The transcript API and watch-page fallback "
+                "could not retrieve captions. Check whether captions are enabled "
+                "and the video is public. API error: "
+                f"{message}. Fallback error: "
+                f"{type(fallback_exc).__name__}: {fallback_exc}"
+            ) from fallback_exc
+
 
 def _phrase_regex(concept):
     # Allow normal spaces or hyphens between words, with word boundaries.
