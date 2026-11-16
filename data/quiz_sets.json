@@ -1,0 +1,73 @@
+[
+  {
+    "set_id": "f1ad89af-12d0-484c-8d64-319bc170fe42",
+    "set_number": 1,
+    "created_at_utc": "2026-11-16T13:30:55.908255+00:00",
+    "transcript_hash": "84c48fef57b33e4591f4847e2ec7de21081a6ead28d679bba72b4e6b7a586770",
+    "video_title": "YouTube video JxgmHe2NyeY",
+    "video_url": "https://youtu.be/JxgmHe2NyeY?si=W_oWvfj4H9LRNyaT",
+    "question_count": 5,
+    "questions": [
+      {
+        "question": "According to the video, complete the statement:\n\n________ be able to see that based on this input features the independent feature we need to determine whether",
+        "options": [
+          "head here you'll",
+          "Matrix so I'm",
+          "columns is equal",
+          "best fit line"
+        ],
+        "answer": "head here you'll",
+        "source_context": "head here you'll be able to see that based on this input features the independent feature we need to determine whether",
+        "concept": "head here you'll"
+      },
+      {
+        "question": "According to the video, complete the statement:\n\n________ to DF do Target so if I execute this and now if I probably print my data set",
+        "options": [
+          "head here you'll",
+          "Matrix so I'm",
+          "columns is equal",
+          "best fit line"
+        ],
+        "answer": "columns is equal",
+        "source_context": "columns is equal to DF do Target so if I execute this and now if I probably print my data set",
+        "concept": "columns is equal"
+      },
+      {
+        "question": "According to the video, complete the statement:\n\n________ uh import so this basic things I have with me so I will go and take any data set that I want from SK learn.",
+        "options": [
+          "head here you'll",
+          "pyplot as PLT",
+          "best fit line",
+          "columns is equal"
+        ],
+        "answer": "pyplot as PLT",
+        "source_context": "pyplot as PLT uh import so this basic things I have with me so I will go and take any data set that I want from SK learn.",
+        "concept": "pyplot as PLT"
+      },
+      {
+        "question": "According to the video, complete the statement:\n\nshort what we are going to do in linear regression is that we'll try to find out a ________ which will actually help us to do the prediction that basically means if I get my new age",
+        "options": [
+          "columns is equal",
+          "best fit line",
+          "Matrix so I'm",
+          "head here you'll"
+        ],
+        "answer": "best fit line",
+        "source_context": "short what we are going to do in linear regression is that we'll try to find out a best fit line which will actually help us to do the prediction that basically means if I get my new age",
+        "concept": "best fit line"
+      },
+      {
+        "question": "According to the video, complete the statement:\n\n________ going to write from SK learn import let's say I'm saying from skarn do Matrix import r² R2",
+        "options": [
+          "head here you'll",
+          "best fit line",
+          "Matrix so I'm",
+          "columns is equal"
+        ],
+        "answer": "Matrix so I'm",
+        "source_context": "Matrix so I'm going to write from SK learn import let's say I'm saying from skarn do Matrix import r² R2",
+        "concept": "Matrix so I'm"
+      }
+    ]
+  }
+]
