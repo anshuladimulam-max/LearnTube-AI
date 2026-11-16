@@ -70,5 +70,29 @@
         "is_correct": false
       }
     ]
+  },
+  {
+    "attempt_id": "0f642c4b-4af7-44dd-969e-648411ab7d91",
+    "completed_at_utc": "2026-11-16T09:32:50.035382+00:00",
+    "video_title": "Pasted transcript",
+    "video_url": "",
+    "topic": "Artificial Intelligence",
+    "score": 1,
+    "total": 1,
+    "percentage": 100,
+    "questions": [
+      {
+        "question": "AI ________ whatever role you are in you are as a machine learning developer you working as a deep learning developer Vision developer or a data scientist or an AI engineer at the end of the day you are actually creating AI application so if I really want to Define what is this artificial intelligence you can just say that it is a process wherein we create some kind of applications in which it will be able to do its task without any human intervention so that basically means a person need not monitor this AI application automatically it'll",
+        "options": [
+          "Artificial Intelligence",
+          "Natural Language Processing",
+          "Supervised Learning",
+          "Data Science"
+        ],
+        "correct_answer": "Artificial Intelligence",
+        "user_answer": "Artificial Intelligence",
+        "is_correct": true
+      }
+    ]
   }
 ]
