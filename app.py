@@ -213,14 +213,88 @@ def split_transcript(text, size=100):
     return [" ".join(words[i:i + size]) for i in range(0, len(words), size)]
 
 
-def extract_transcript(video_id):
-    """Retrieve an English transcript using the stable legacy API first.
+def _extract_transcript_from_watch_page(video_id):
+    """Fallback: read caption-track metadata from the public watch page.
 
-    The deployment previously relied on youtube-transcript-api's requests-based
-    0.6.x interface. Pinning that interface avoids silently switching to the
-    newer 1.x HTTP client when Streamlit Cloud rebuilds the app. The function
-    still supports 1.x if the environment has it, but never repeats a request
-    after an explicit YouTube IP/rate-limit block.
+    This is a best-effort fallback, not a way to bypass YouTube restrictions.
+    It can work when the transcript library's endpoint fails but the watch page
+    and caption-track URL remain accessible from the host.
+    """
+    from json import JSONDecoder
+    from xml.etree import ElementTree
+
+    watch_url = f"https://www.youtube.com/watch?v={video_id}"
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/122.0.0.0 Safari/537.36"
+        ),
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    page = requests.get(watch_url, headers=headers, timeout=18)
+    if page.status_code in (403, 429):
+        raise RuntimeError(f"YOUTUBE_REQUEST_BLOCKED: watch page returned HTTP {page.status_code}")
+    page.raise_for_status()
+
+    marker = '"captionTracks":'
+    marker_at = page.text.find(marker)
+    if marker_at < 0:
+        raise RuntimeError("CAPTIONS_UNAVAILABLE: YouTube did not expose caption tracks on the watch page.")
+
+    raw_tracks = page.text[marker_at + len(marker):].lstrip()
+    tracks, _ = JSONDecoder().raw_decode(raw_tracks)
+    if not isinstance(tracks, list) or not tracks:
+        raise RuntimeError("CAPTIONS_UNAVAILABLE: This video has no available caption tracks.")
+
+    # Prefer manually supplied English captions, then generated English, then
+    # another available language so non-English educational videos can work too.
+    def track_rank(track):
+        language = str(track.get("languageCode", "")).lower()
+        is_english = language.startswith("en")
+        is_asr = track.get("kind") == "asr"
+        return (0 if is_english and not is_asr else 1 if is_english else 2, language)
+
+    tracks.sort(key=track_rank)
+    base_url = tracks[0].get("baseUrl")
+    if not base_url:
+        raise RuntimeError("CAPTIONS_UNAVAILABLE: The caption track did not include a retrieval URL.")
+
+    caption_response = requests.get(
+        base_url,
+        params={"fmt": "json3"},
+        headers=headers,
+        timeout=18,
+    )
+    if caption_response.status_code in (403, 429):
+        raise RuntimeError(f"YOUTUBE_REQUEST_BLOCKED: caption track returned HTTP {caption_response.status_code}")
+    caption_response.raise_for_status()
+
+    # YouTube's json3 format is preferred. Fall back to XML for older tracks.
+    try:
+        payload = caption_response.json()
+        segments = []
+        for event in payload.get("events", []):
+            for segment in event.get("segs", []) or []:
+                value = segment.get("utf8", "")
+                if value:
+                    segments.append(value)
+        result = clean_transcript(" ".join(segments))
+    except (ValueError, AttributeError, TypeError):
+        root = ElementTree.fromstring(caption_response.text)
+        result = clean_transcript(" ".join(node.text or "" for node in root.iter() if node.tag.endswith("text")))
+
+    if not result:
+        raise RuntimeError("CAPTIONS_UNAVAILABLE: The selected caption track was empty.")
+    return result
+
+
+def extract_transcript(video_id):
+    """Retrieve captions using the library first and a watch-page fallback.
+
+    The app supports youtube-transcript-api 0.6.x and 1.x. It makes a single
+    attempt per method and reports IP restrictions accurately. If the hosting
+    provider's IP is blocked by YouTube, no Python-only retry can guarantee access.
     """
     from youtube_transcript_api import YouTubeTranscriptApi
 
@@ -242,12 +316,13 @@ def extract_transcript(video_id):
         return any(marker in message for marker in (
             "requestblocked", "ip blocked", "blocking requests from your ip",
             "too many requests", "http 429", "status code 429",
-            "forbidden", "http 403", "status code 403"
+            "forbidden", "http 403", "status code 403",
         ))
 
     errors = []
+    blocked_seen = False
 
-    # Preferred path: requests-based API used by the earlier working build.
+    # Preferred path: legacy requests-based interface (pinned in requirements).
     legacy_get = getattr(YouTubeTranscriptApi, "get_transcript", None)
     if callable(legacy_get):
         try:
@@ -257,39 +332,45 @@ def extract_transcript(video_id):
                 return transcript
             errors.append("The English caption track was empty.")
         except Exception as exc:
-            if is_blocked(exc):
-                raise RuntimeError(
-                    "YOUTUBE_REQUEST_BLOCKED: YouTube refused the caption request "
-                    "from this server. The video ID is valid, but the hosting IP "
-                    "is temporarily restricted. Please try again later or use the "
-                    "transcript upload/paste option."
-                ) from None
-            errors.append(f"Legacy transcript API: {type(exc).__name__}: {exc}")
+            blocked_seen = blocked_seen or is_blocked(exc)
+            errors.append(f"Transcript library: {type(exc).__name__}: {exc}")
 
-    # Compatibility path for youtube-transcript-api 1.x installations.
+    # Try the public watch page once. This can succeed when only the library
+    # endpoint is unavailable; it will also clearly identify a host-level block.
     try:
-        api = YouTubeTranscriptApi()
-        fetch = getattr(api, "fetch", None)
-        if callable(fetch):
-            snippets = fetch(video_id, languages=["en", "en-US", "en-GB"])
-            transcript = snippets_to_text(snippets)
-            if transcript:
-                return transcript
-            errors.append("The English caption track was empty.")
+        return _extract_transcript_from_watch_page(video_id)
     except Exception as exc:
-        if is_blocked(exc):
-            raise RuntimeError(
-                "YOUTUBE_REQUEST_BLOCKED: YouTube refused the caption request "
-                "from this server. The video ID is valid, but the hosting IP "
-                "is temporarily restricted. Please try again later or use the "
-                "transcript upload/paste option."
-            ) from None
-        errors.append(f"Current transcript API: {type(exc).__name__}: {exc}")
+        blocked_seen = blocked_seen or is_blocked(exc) or "YOUTUBE_REQUEST_BLOCKED" in str(exc)
+        errors.append(f"Watch-page fallback: {type(exc).__name__}: {exc}")
 
-    detail = " | ".join(errors[-2:])
+    # Compatibility for 1.x, only if present and earlier methods did not succeed.
+    if not blocked_seen:
+        try:
+            api = YouTubeTranscriptApi()
+            fetch = getattr(api, "fetch", None)
+            if callable(fetch):
+                snippets = fetch(video_id, languages=["en", "en-US", "en-GB"])
+                transcript = snippets_to_text(snippets)
+                if transcript:
+                    return transcript
+                errors.append("The English caption track was empty.")
+        except Exception as exc:
+            blocked_seen = blocked_seen or is_blocked(exc)
+            errors.append(f"Current transcript API: {type(exc).__name__}: {exc}")
+
+    if blocked_seen:
+        raise RuntimeError(
+            "YOUTUBE_REQUEST_BLOCKED: YouTube is refusing automated caption requests "
+            "from this hosting server. The video URL may be valid; this is a server/IP "
+            "restriction. Use the transcript paste or TXT/SRT/VTT upload option, or "
+            "run the app from a network that YouTube permits."
+        )
+
+    detail = " | ".join(errors[-3:])
     raise RuntimeError(
-        "CAPTIONS_UNAVAILABLE: No English transcript could be retrieved. "
-        "Check that captions are enabled for this video. " + detail
+        "CAPTIONS_UNAVAILABLE: No caption track could be retrieved for this video. "
+        "Captions may be disabled, unavailable in the requested language, or restricted. "
+        + detail
     )
 
 def _phrase_regex(concept):
@@ -999,10 +1080,10 @@ elif page == "Video Learning":
                         text = extract_transcript(video_id)
                 except Exception as exc:
                     error_text = str(exc)
-                    if "YOUTUBE_CLOUD_BLOCK" in error_text:
+                    if "YOUTUBE_REQUEST_BLOCKED" in error_text or "YOUTUBE_CLOUD_BLOCK" in error_text:
                         st.error("YouTube is blocking caption requests from the Streamlit Cloud server. Your video link is valid; this is a hosting restriction, not a language or URL problem.")
                     else:
-                        st.warning("Automatic captions could not be retrieved. Captions may be disabled or restricted for this video.")
+                        st.warning("No usable caption track was returned. Captions may be disabled, unavailable in the selected language, or restricted by YouTube.")
                     st.markdown("**Use the reliable transcript input below:** open the video on YouTube → select **Show transcript** → copy the transcript → paste it into the transcript box, or save it as a `.txt`, `.srt`, or `.vtt` file and upload it.")
                     st.caption("The app will process pasted or uploaded transcript text without making another YouTube request.")
         elif not text and not url.strip():
