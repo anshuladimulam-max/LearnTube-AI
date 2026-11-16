@@ -1,0 +1,74 @@
+[
+  {
+    "attempt_id": "077d7f0f-dfbb-4514-af93-c7aaaadd61c9",
+    "completed_at_utc": "2026-11-16T09:32:30.538831+00:00",
+    "video_title": "Pasted transcript",
+    "video_url": "",
+    "topic": "Deep Learning",
+    "score": 1,
+    "total": 5,
+    "percentage": 20,
+    "questions": [
+      {
+        "question": "something to learn something so for this you use something called as multi-layered neural networks so this is what ________ is it is a subset of machine learning its main aim is to mimic human brain so they actually create multi-layer neural network and this multi-layered neural network will basically help you to train the machines or applications whatever we are trying to create and deep learning has really really done an amazing work with the help of deep learning we are able to solve such a complex complex complex use cases that we will be probably discussing as",
+        "options": [
+          "Classification",
+          "Linear Regression",
+          "Deep Learning",
+          "Natural Language Processing"
+        ],
+        "correct_answer": "Deep Learning",
+        "user_answer": "Deep Learning",
+        "is_correct": true
+      },
+      {
+        "question": "data no you cannot do that when I was working in Panasonic I got various different kind of task sometime I was told to use W powerbi to visualize analyze the data sometime I was given a machine learning project sometime I was given a ________ project so as a data scientist if I consider where does data scientist fall into this it will be a part of everything so if I talk about machine learning and deep learning with respect to any kind of problem statement that we solve the majority of the business use cases will be",
+        "options": [
+          "Deep Learning",
+          "Supervised Learning",
+          "Computer Vision",
+          "Clustering"
+        ],
+        "correct_answer": "Deep Learning",
+        "user_answer": "Supervised Learning",
+        "is_correct": false
+      },
+      {
+        "question": "we go ahead now if I come to data science see this is the thing guys if you want to say yourself as a data scientist tomorrow you given a business use case and situation comes that you probably have to solve that use case with the help of machine learning algorithms or ________ algorithms again the final goal is to create an AI application right you cannot say that I am a data scientist and I'll just work in machine learning I or I'll work in deep learning or I may I don't know how to analyze the",
+        "options": [
+          "Deep Learning",
+          "Natural Language Processing",
+          "Machine Learning",
+          "Classification"
+        ],
+        "correct_answer": "Deep Learning",
+        "user_answer": "Natural Language Processing",
+        "is_correct": false
+      },
+      {
+        "question": "falling in two sections one is supervised machine learning one is unsupervised machine learning so most of the problems that you are basically solving this is with respect to this two problem statement two different types of machine learning algorithms that is supervised machine learning and ________ if I talk about supervised machine learning two major problem statements that you are basically solving here also one is regression problem and the other one is something called as classification problem and in the case of unsupervised machine learning problem statement you are basically solving two different types of problem one",
+        "options": [
+          "Deep Learning",
+          "Natural Language Processing",
+          "Linear Regression",
+          "Artificial Intelligence"
+        ],
+        "correct_answer": "Deep Learning",
+        "user_answer": "Artificial Intelligence",
+        "is_correct": false
+      },
+      {
+        "question": "AI artificial intelligence whatever role you are in you are as a machine learning developer you working as a ________ developer Vision developer or a data scientist or an AI engineer at the end of the day you are actually creating AI application so if I really want to Define what is this artificial intelligence you can just say that it is a process wherein we create some kind of applications in which it will be able to do its task without any human intervention so that basically means a person need not monitor this AI application automatically it'll",
+        "options": [
+          "Deep Learning",
+          "Natural Language Processing",
+          "Neural Networks",
+          "Unsupervised Learning"
+        ],
+        "correct_answer": "Deep Learning",
+        "user_answer": "Natural Language Processing",
+        "is_correct": false
+      }
+    ]
+  }
+]
