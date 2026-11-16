@@ -110,6 +110,52 @@ def save_attempt(attempt):
     return latest
 
 
+# -------------------- Persistent generated quiz sets --------------------
+def quiz_sets_file():
+    return str(get_setting("QUIZ_SETS_FILE", "data/quiz_sets.json"))
+
+
+def load_quiz_sets():
+    token, repo, branch, _ = github_config()
+    path = quiz_sets_file()
+    url = f"{GITHUB_API}/repos/{repo}/contents/{path}"
+    response = requests.get(url, headers=github_headers(token), params={"ref": branch}, timeout=20)
+    if response.status_code == 404:
+        return [], None
+    if response.status_code != 200:
+        raise RuntimeError(f"GitHub could not load saved quiz sets (HTTP {response.status_code}): {response.text[:300]}")
+    import base64
+    try:
+        data = json.loads(base64.b64decode(response.json()["content"]).decode("utf-8"))
+    except Exception as exc:
+        raise RuntimeError("The saved quiz sets file is not valid JSON.") from exc
+    if not isinstance(data, list):
+        raise RuntimeError("The saved quiz sets file must contain a JSON list.")
+    return data, response.json().get("sha")
+
+
+def save_quiz_set(quiz_set):
+    token, repo, branch, _ = github_config()
+    latest, sha = load_quiz_sets()
+    if any(item.get("set_id") == quiz_set["set_id"] for item in latest):
+        return latest
+    latest.append(quiz_set)
+    import base64
+    content = json.dumps(latest, ensure_ascii=False, indent=2)
+    body = {
+        "message": f"Save LearnTube question set {quiz_set['set_id']}",
+        "content": base64.b64encode(content.encode("utf-8")).decode("ascii"),
+        "branch": branch,
+    }
+    if sha:
+        body["sha"] = sha
+    url = f"{GITHUB_API}/repos/{repo}/contents/{quiz_sets_file()}"
+    response = requests.put(url, headers=github_headers(token), json=body, timeout=25)
+    if response.status_code not in (200, 201):
+        raise RuntimeError(f"GitHub could not save the question set (HTTP {response.status_code}): {response.text[:350]}")
+    return latest
+
+
 # -------------------- Learning and quiz helpers --------------------
 # A small seed vocabulary is retained as a fallback, but topic detection is
 # transcript-driven so the app is not restricted to machine-learning videos.
@@ -456,6 +502,222 @@ def generate_questions(transcript, selected, count=QUIZ_QUESTION_COUNT):
             break
     return questions
 
+
+def generate_overall_questions(transcript, count=QUIZ_QUESTION_COUNT, previous_questions=None):
+    """Create an overall quiz sampled across the whole transcript.
+
+    Questions are transcript sentence-completion items. Each new set avoids
+    previously used masked questions while retaining the earlier sets.
+    """
+    if not transcript or count < 1:
+        return []
+
+    concepts = identify_concepts(transcript, limit=60)
+    generic_terms = {
+        "process", "supports", "support", "release", "releases", "convert", "converts",
+        "use", "uses", "used", "using", "make", "makes", "made", "include", "includes",
+        "including", "provide", "provides", "important", "different", "example", "examples",
+        "information", "things", "ways", "people", "time", "today", "video", "lesson",
+        "topic", "topics", "learning", "understanding", "explain", "explains", "show", "shows",
+        "known", "called", "plant", "plants", "organism", "organisms", "living", "world",
+        "system", "systems", "study", "studies", "examines", "relationships", "variety",
+        "changing", "influences", "influence", "describe", "describes", "means", "accelerated",
+        "associated", "measures", "changes", "changed", "increased", "increase", "decreased",
+        "decrease", "began", "begin", "occurs", "occur", "depends", "depend", "powered",
+        "produces", "produced", "attracts", "opposes", "states", "remains", "helps", "help",
+        "affects", "protects", "protect", "transformed", "transform", "expanded", "expands",
+        "connected", "connects", "influenced", "contains", "contain", "absorbs", "absorb",
+        "explains", "takes", "take", "creates", "create", "combines", "combine", "controls",
+        "control", "occurring", "power", "measured", "measure", "develops", "develop", "affect",
+        "denature", "denatures", "denatured", "stores", "store", "carries", "carry",
+        "better", "complex", "really", "often", "usually", "generally"
+    }
+
+    # Add specific noun phrases from sentence openings, including one-off key
+    # phrases that a frequency-only detector may miss.
+    phrase_candidates = []
+    sentences = [re.sub(r"\s+", " ", part).strip() for part in re.split(r"(?<=[.!?])\s+|[\r\n]+", transcript) if part.strip()]
+    for sentence in sentences:
+        tokens = re.findall(r"[A-Za-z][A-Za-z0-9+#'-]*", sentence)
+        while tokens and tokens[0].casefold() in {"the", "a", "an", "this", "these", "those"}:
+            tokens.pop(0)
+        for size in (2, 3):
+            if len(tokens) < size:
+                continue
+            phrase_tokens = tokens[:size]
+            if size == 3 and phrase_tokens[1].casefold() not in _STOPWORDS:
+                continue
+            content_is_clean = all(
+                token.casefold() in _STOPWORDS or
+                (token.casefold() not in generic_terms and token.casefold() not in _VERB_NOISE)
+                for token in phrase_tokens
+            )
+            meaningful = [token for token in phrase_tokens if token.casefold() not in _STOPWORDS]
+            if len(meaningful) >= 2 and content_is_clean and phrase_tokens[-1].casefold() not in _STOPWORDS:
+                phrase_candidates.append(" ".join(phrase_tokens))
+
+    concepts.extend(phrase_candidates)
+    filtered, seen_concepts = [], set()
+    for concept in concepts:
+        concept = re.sub(r"\s+", " ", str(concept)).strip(" .,:;!?-")
+        key = concept.casefold()
+        if not concept or key in seen_concepts:
+            continue
+        tokens = re.findall(r"[A-Za-z][A-Za-z0-9+#'-]*", key)
+        meaningful = [token for token in tokens if token not in _STOPWORDS and token not in _VERB_NOISE and token not in generic_terms]
+        if meaningful and (len(tokens) > 1 or tokens[0] not in generic_terms):
+            filtered.append(concept)
+            seen_concepts.add(key)
+    concepts = sorted(filtered, key=lambda value: (-len(value.split()), -len(value), value.casefold()))
+    if not concepts:
+        return []
+
+    previous_questions = previous_questions or []
+    used_questions = {
+        re.sub(r"\W+", " ", str(item.get("question", "")).casefold()).strip()
+        for item in previous_questions if item.get("question")
+    }
+
+    # If captions contain no punctuation, create overlapping sentence-like windows.
+    if len(sentences) <= 1:
+        words = transcript.split()
+        sentences = [" ".join(words[i:i + 38]) for i in range(0, max(1, len(words) - 8), 24)]
+
+    by_concept = {}
+    for concept in concepts:
+        pattern = _concept_regex(concept)
+        contexts = []
+        for sentence in sentences:
+            match = pattern.search(sentence)
+            if not match:
+                continue
+            words = sentence.split()
+            if len(words) > 48:
+                # Keep a readable window around the answer phrase.
+                char_before = sentence[:match.start()].split()
+                char_after = sentence[match.end():].split()
+                before = char_before[-18:]
+                after = char_after[:18]
+                context = " ".join(before + [match.group(0)] + after)
+            else:
+                context = sentence
+            context = re.sub(r"\s+", " ", context).strip()
+            if 5 <= len(context.split()) <= 48:
+                contexts.append(context)
+        if contexts:
+            by_concept[concept] = list(dict.fromkeys(contexts))
+
+    if not by_concept:
+        return []
+
+    rng = random.Random(uuid.uuid4().int)
+    # Shuffle contexts within each concept, but cycle through concepts so the
+    # five questions sample different ideas from the video.
+    for contexts in by_concept.values():
+        rng.shuffle(contexts)
+    concept_order = []
+    for phrase_size in sorted({len(value.split()) for value in by_concept}, reverse=True):
+        group = [value for value in by_concept if len(value.split()) == phrase_size]
+        rng.shuffle(group)
+        concept_order.extend(group)
+
+    questions, seen_this_set = [], set()
+    while len(questions) < count:
+        added = False
+        for concept in concept_order:
+            contexts = by_concept.get(concept, [])
+            while contexts:
+                context = contexts.pop()
+                match = _concept_regex(concept).search(context)
+                if not match:
+                    continue
+                masked = context[:match.start()] + "________" + context[match.end():]
+                question_text = "According to the video, complete the statement:\n\n" + masked
+                fingerprint = re.sub(r"\W+", " ", question_text.casefold()).strip()
+                if fingerprint in used_questions or fingerprint in seen_this_set:
+                    continue
+                distractors = _transcript_distractors(transcript, concept, concepts, needed=3)
+                unique_distractors, seen_options = [], {concept.casefold()}
+                for value in distractors:
+                    option_key = value.casefold()
+                    if option_key not in seen_options:
+                        seen_options.add(option_key)
+                        unique_distractors.append(value)
+                    if len(unique_distractors) == 3:
+                        break
+                if len(unique_distractors) < 3:
+                    continue
+                options = unique_distractors + [concept]
+                rng.shuffle(options)
+                questions.append({
+                    "question": question_text,
+                    "options": options,
+                    "answer": concept,
+                    "source_context": context,
+                    "concept": concept,
+                })
+                seen_this_set.add(fingerprint)
+                added = True
+                break
+            if len(questions) >= count:
+                break
+        if not added:
+            break
+    return questions[:count]
+
+
+def current_transcript_hash():
+    return hashlib.sha256(st.session_state.transcript.encode("utf-8")).hexdigest()
+
+
+def ensure_current_quiz_sets_loaded():
+    transcript_hash = current_transcript_hash()
+    if st.session_state.get("quiz_sets_loaded_for") == transcript_hash:
+        return
+    try:
+        all_sets, _ = load_quiz_sets()
+        st.session_state.quiz_sets = [item for item in all_sets if item.get("transcript_hash") == transcript_hash]
+        st.session_state.quiz_sets_storage_error = None
+    except Exception as exc:
+        # Keep this session usable even when GitHub storage is temporarily unavailable.
+        st.session_state.quiz_sets = [item for item in st.session_state.get("quiz_sets", []) if item.get("transcript_hash") == transcript_hash]
+        st.session_state.quiz_sets_storage_error = str(exc)
+    st.session_state.quiz_sets_loaded_for = transcript_hash
+
+
+def create_and_store_quiz_set():
+    ensure_current_quiz_sets_loaded()
+    prior_questions = [question for item in st.session_state.quiz_sets for question in item.get("questions", [])]
+    questions = generate_overall_questions(st.session_state.transcript, count=QUIZ_QUESTION_COUNT, previous_questions=prior_questions)
+    if not questions:
+        return None
+    set_id = str(uuid.uuid4())
+    record = {
+        "set_id": set_id,
+        "set_number": len(st.session_state.quiz_sets) + 1,
+        "created_at_utc": datetime.now(timezone.utc).isoformat(),
+        "transcript_hash": current_transcript_hash(),
+        "video_title": st.session_state.video_title,
+        "video_url": st.session_state.video_url,
+        "question_count": len(questions),
+        "questions": questions,
+    }
+    st.session_state.quiz_sets.append(record)
+    st.session_state.active_quiz_set_id = set_id
+    st.session_state.questions = questions
+    st.session_state.quiz_result = None
+    st.session_state.score = None
+    st.session_state.quiz_topic = "Entire video"
+    st.session_state.quiz_number += 1
+    try:
+        save_quiz_set(record)
+        record["saved"] = True
+        st.session_state.quiz_sets_storage_error = None
+    except Exception as exc:
+        record["saved"] = False
+        st.session_state.quiz_sets_storage_error = str(exc)
+    return record
+
 def youtube_video_id(url):
     """Extract IDs from watch, youtu.be, shorts, embed, and live URLs."""
     from urllib.parse import urlparse, parse_qs
@@ -485,6 +747,8 @@ defaults = {
     "transcript": "", "concepts": [], "chunks": [], "questions": [],
     "score": None, "quiz_result": None, "quiz_number": 0, "video_url": "",
     "video_title": "", "session_started": None, "saved_attempt_ids": [],
+    "quiz_sets": [], "quiz_sets_loaded_for": None, "active_quiz_set_id": None,
+    "quiz_sets_storage_error": None,
 }
 for key, default in defaults.items():
     if key not in st.session_state:
@@ -684,7 +948,7 @@ if page == "Dashboard":
     d.metric("Learning status","In progress" if st.session_state.transcript else "Not started")
     st.markdown('<div class="section-label">Get started</div><div class="section-hint">Follow these steps to turn a video into an active learning session.</div>',unsafe_allow_html=True)
     x,y,z=st.columns(3)
-    for col,no,title,copy in [(x,"01","Add a video","Paste a YouTube link or provide its transcript."),(y,"02","Explore concepts","Review recurring topic phrases extracted from the transcript."),(z,"03","Take a quiz","Answer topic-based questions and review your score.")]:
+    for col,no,title,copy in [(x,"01","Add a video","Paste a YouTube link or provide its transcript."),(y,"02","Explore concepts","Review recurring topic phrases extracted from the transcript."),(z,"03","Take a quiz","Answer an overall video quiz, generate additional sets, and review your score.")]:
         with col: st.markdown(f'<div class="step-card"><div class="step-no">STEP {no}</div><div class="step-name">{title}</div><div class="step-copy">{copy}</div></div>',unsafe_allow_html=True)
     st.markdown('<div class="section-label">Continue learning</div>',unsafe_allow_html=True)
     left,right=st.columns([1.4,1])
@@ -753,8 +1017,8 @@ elif page == "Video Learning":
                         text = extract_transcript(video_id)
                 except Exception as exc:
                     error_text = str(exc)
-                    if "YOUTUBE_REQUEST_BLOCKED" in error_text or "YOUTUBE_CLOUD_BLOCK" in error_text or "RequestBlocked" in error_text or "blocking requests from your IP" in error_text:
-                        st.error("YouTube blocked the caption request from this server. The URL was accepted, but the hosting IP was refused. This is not a transcript-language or URL-format error.")
+                    if "YOUTUBE_CLOUD_BLOCK" in error_text:
+                        st.error("YouTube is blocking caption requests from the Streamlit Cloud server. Your video link is valid; this is a hosting restriction, not a language or URL problem.")
                     else:
                         st.warning("Automatic captions could not be retrieved. Captions may be disabled or restricted for this video.")
                     st.markdown("**Use the reliable transcript input below:** open the video on YouTube → select **Show transcript** → copy the transcript → paste it into the transcript box, or save it as a `.txt`, `.srt`, or `.vtt` file and upload it.")
@@ -783,6 +1047,9 @@ elif page == "Video Learning":
                 st.session_state.quiz_result = None
                 st.session_state.quiz_topic = None
                 st.session_state.score = None
+                st.session_state.quiz_sets_loaded_for = None
+                st.session_state.quiz_sets = []
+                st.session_state.active_quiz_set_id = None
                 st.success("Transcript processed successfully. Review the concepts below.")
 
     if st.session_state.transcript:
@@ -800,67 +1067,88 @@ elif page == "Video Learning":
         with st.expander("Read processed transcript"):
             st.write(st.session_state.transcript)
 
-        if st.session_state.concepts:
-            st.markdown('<div class="section-label">Create your quiz</div><div class="section-hint">Choose a detected concept to prepare up to five transcript-based multiple-choice questions.</div>', unsafe_allow_html=True)
-            current_topic = st.session_state.get("quiz_topic")
-            topic_index = st.session_state.concepts.index(current_topic) if current_topic in st.session_state.concepts else 0
-            chosen_topic = st.selectbox("Choose a concept for your quiz", st.session_state.concepts, index=topic_index, key="video_quiz_topic")
-            if st.button("Generate quiz from this transcript", use_container_width=True, key="make_quiz_video"):
-                made_questions = generate_questions(st.session_state.transcript, chosen_topic, count=QUIZ_QUESTION_COUNT)
-                st.session_state.questions = made_questions
-                st.session_state.quiz_topic = chosen_topic if made_questions else None
-                st.session_state.quiz_result = None
-                st.session_state.score = None
-                st.session_state.quiz_number += 1
-                if made_questions:
-                    st.success(f"Prepared {len(made_questions)} question(s). Open the Quiz page to answer them.")
-                    if len(made_questions) < QUIZ_QUESTION_COUNT:
-                        st.warning("Fewer than five distinct transcript contexts were available, so the quiz contains only the questions that could be supported.")
-                else:
-                    st.warning("No suitable sentence was found for this concept. Choose another concept or paste a longer transcript with explanatory sentences.")
-            st.caption("Question method: transcript-based sentence completion. The correct term is taken from the selected transcript context; alternative terms are drawn from the same transcript. This is template-based question generation, not an external AI/LLM or a semantic fact-checker.")
+        st.markdown('<div class="section-label">Overall video quiz</div><div class="section-hint">Generate five questions covering the important ideas across the complete transcript. You can create additional sets after finishing a quiz.</div>', unsafe_allow_html=True)
+        if st.button("Generate overall quiz · 5 questions", use_container_width=True, key="make_overall_quiz_video"):
+            new_set = create_and_store_quiz_set()
+            if new_set:
+                st.success(f"Question Set {new_set['set_number']} created with {len(new_set['questions'])} questions. Open the Quiz page to begin.")
+                if len(new_set["questions"]) < QUIZ_QUESTION_COUNT:
+                    st.info("Only distinct, unused transcript contexts are available, so this set contains fewer than five questions.")
+                if not new_set.get("saved", False):
+                    st.warning("This set is available in the current session, but GitHub could not save it permanently.")
+            else:
+                st.warning("No additional unused question contexts were found. Add a longer transcript or process more learning material to create another set.")
+        st.caption("Each set samples the complete transcript across its detected concepts. Previously generated question contexts are excluded from later sets where possible.")
     else:
         empty_state("Your workspace is ready", "Add a YouTube video or paste transcript text to begin.")
 
 
 # -------------------- Quiz --------------------
 elif page == "Quiz":
-    page_header("CHECK YOUR UNDERSTANDING", "Knowledge Check", "Practise with questions based on concepts found in your processed transcript.")
+    page_header("CHECK YOUR UNDERSTANDING", "Knowledge Check", "Take an overall assessment based on the complete video transcript. Generate another set whenever you want more practice.")
 
     if not st.session_state.transcript:
         empty_state("No transcript available", "Go to Video Learning and process a transcript before generating a quiz.")
-    elif not st.session_state.concepts:
-        empty_state("No supported concepts found", "The detector looks for repeated topic words and phrases across many subject areas. Try a longer transcript with clear explanations, or paste a cleaner transcript.")
     else:
-        qcol, overview = st.columns([1.35, 1])
-        with qcol:
-            st.markdown('<div class="panel-title">Choose your quiz topic</div><div class="panel-subtitle">Select a concept identified in your transcript.</div>', unsafe_allow_html=True)
-            current_topic = st.session_state.get("quiz_topic")
-            topic_index = st.session_state.concepts.index(current_topic) if current_topic in st.session_state.concepts else 0
-            selected = st.selectbox("Learning topic", st.session_state.concepts, index=topic_index, key="quiz_topic_select")
-            if st.button("Generate quiz questions", use_container_width=True, key="generate_quiz_page"):
-                questions = generate_questions(st.session_state.transcript, selected, count=QUIZ_QUESTION_COUNT)
-                st.session_state.questions = questions
-                st.session_state.quiz_topic = selected if questions else None
-                st.session_state.quiz_result = None
-                st.session_state.score = None
-                st.session_state.quiz_number += 1
-                if questions:
-                    st.success(f"Your quiz contains {len(questions)} transcript-based question(s).")
-                    if len(questions) < QUIZ_QUESTION_COUNT:
-                        st.info("The transcript contained fewer than five distinct suitable contexts. Only supported questions were included.")
+        ensure_current_quiz_sets_loaded()
+        left, right = st.columns([1.35, 1])
+        with left:
+            st.markdown('<div class="panel-title">Overall video assessment</div><div class="panel-subtitle">Five questions sampled across the complete transcript. No topic selection is required.</div>', unsafe_allow_html=True)
+            button_label = "Generate 5 questions" if not st.session_state.quiz_sets else "Want another 5? Generate new questions"
+            if st.button(button_label, use_container_width=True, key="generate_overall_quiz_page"):
+                new_set = create_and_store_quiz_set()
+                if new_set:
+                    st.success(f"Question Set {new_set['set_number']} is ready.")
+                    if len(new_set["questions"]) < QUIZ_QUESTION_COUNT:
+                        st.info(f"This set contains {len(new_set['questions'])} new questions because only that many unused transcript contexts were available.")
+                    if not new_set.get("saved", False):
+                        st.warning("The new set is available in this session, but permanent GitHub saving failed. Check the storage details below.")
                 else:
-                    st.warning("No suitable question contexts were found for this topic. Try a different concept or a longer transcript.")
-        with overview:
+                    st.warning("No new unused questions could be prepared from this transcript. Try a longer transcript or process another video.")
+            if st.session_state.get("quiz_sets_storage_error"):
+                with st.expander("Question-set storage details"):
+                    st.caption("Question sets remain available in this browser session, but permanent storage could not be confirmed.")
+                    st.code(st.session_state.quiz_sets_storage_error[:1000], language=None)
+        with right:
             st.markdown(f'''<div class="panel"><div class="panel-title">Quiz overview</div>
             <div class="panel-subtitle">Current learning material</div>
-            <div style="font-size:1.3rem;font-weight:800;color:#202b2a">{len(st.session_state.concepts)} topics</div>
-            <p style="color:#687572;font-size:.85rem">Up to five questions are prepared from distinct transcript contexts.</p></div>''', unsafe_allow_html=True)
+            <div style="font-size:1.3rem;font-weight:800;color:#202b2a">{len(st.session_state.concepts)} detected concepts</div>
+            <p style="color:#687572;font-size:.85rem">{len(st.session_state.quiz_sets)} saved question set(s) for this transcript. Each new set avoids previously used contexts where possible.</p></div>''', unsafe_allow_html=True)
+
+        # Let learners reopen any previously generated set instead of discarding it.
+        quiz_sets = st.session_state.quiz_sets
+        if quiz_sets:
+            set_by_id = {item["set_id"]: item for item in quiz_sets}
+            set_ids = [item["set_id"] for item in quiz_sets]
+            active_id = st.session_state.get("active_quiz_set_id")
+            default_index = set_ids.index(active_id) if active_id in set_ids else len(set_ids) - 1
+            selected_set_id = st.selectbox(
+                "Your saved question sets",
+                set_ids,
+                index=default_index,
+                format_func=lambda sid: (
+                    f"Set {set_by_id[sid].get('set_number', '?')} · "
+                    f"{set_by_id[sid].get('question_count', len(set_by_id[sid].get('questions', [])))} questions · "
+                    f"{set_by_id[sid].get('created_at_utc', '')[:10]}"
+                ),
+                key="saved_quiz_set_picker",
+            )
+            if selected_set_id != st.session_state.get("active_quiz_set_id"):
+                selected_record = set_by_id[selected_set_id]
+                st.session_state.active_quiz_set_id = selected_set_id
+                st.session_state.questions = selected_record.get("questions", [])
+                st.session_state.quiz_result = None
+                st.session_state.score = None
+                st.session_state.quiz_topic = "Entire video"
+                st.session_state.quiz_number += 1
+                st.rerun()
 
         questions = st.session_state.questions
+        active_set = next((item for item in quiz_sets if item.get("set_id") == st.session_state.get("active_quiz_set_id")), None)
         if questions and not st.session_state.quiz_result:
-            st.markdown('<div class="section-label">Your quiz</div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="panel-title">{st.session_state.quiz_topic}</div><div class="panel-subtitle">{len(questions)} question(s) · Select one answer for each question.</div>', unsafe_allow_html=True)
+            set_label = f"Question Set {active_set.get('set_number', '')}" if active_set else "Current question set"
+            st.markdown('<div class="section-label">Your overall quiz</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="panel-title">{set_label}</div><div class="panel-subtitle">{len(questions)} question(s) · Questions cover the complete transcript.</div>', unsafe_allow_html=True)
             with st.form(f"quiz_form_{st.session_state.quiz_number}"):
                 answers = []
                 for i, question in enumerate(questions):
@@ -886,17 +1174,19 @@ elif page == "Quiz":
 
                     attempt = {
                         "attempt_id": attempt_id,
+                        "quiz_set_id": st.session_state.get("active_quiz_set_id"),
                         "completed_at_utc": completed_at,
                         "video_title": st.session_state.video_title,
                         "video_url": st.session_state.video_url,
-                        "topic": st.session_state.quiz_topic,
+                        "topic": "Entire video",
                         "score": correct,
                         "total": len(questions),
                         "percentage": percentage,
                         "questions": [
                             {"question": questions[i]["question"], "options": questions[i]["options"],
                              "correct_answer": questions[i]["answer"], "user_answer": answers[i],
-                             "is_correct": answers[i] == questions[i]["answer"]}
+                             "is_correct": answers[i] == questions[i]["answer"],
+                             "concept": questions[i].get("concept", "")}
                             for i in range(len(questions))
                         ]
                     }
@@ -910,7 +1200,6 @@ elif page == "Quiz":
                         with st.expander("Storage technical details"):
                             st.code(str(exc)[:1200], language=None)
 
-        # Show result separately and hide the submitted form to prevent duplicate attempts.
         if st.session_state.quiz_result and st.session_state.questions:
             result = st.session_state.quiz_result
             st.markdown('<div class="section-label">Your result</div>', unsafe_allow_html=True)
@@ -919,11 +1208,11 @@ elif page == "Quiz":
             r2.metric("Final score", f"{result['percentage']}%")
             r3.metric("Performance", "High" if result["percentage"] >= 80 else "Medium" if result["percentage"] >= 50 else "Needs revision")
             if result["percentage"] >= 80:
-                st.success("High performance: try a more advanced learning topic.")
+                st.success("High performance: you demonstrated strong understanding of the video overall.")
             elif result["percentage"] >= 50:
-                st.info("Medium performance: revise this concept and practise again.")
+                st.info("Medium performance: review the missed ideas and try another question set.")
             else:
-                st.warning("Keep practising: revisit the transcript and review the concept.")
+                st.warning("Keep practising: revisit the transcript and try another overall question set.")
             with st.expander("Review your answers", expanded=True):
                 for i, question in enumerate(st.session_state.questions):
                     st.markdown(f"**Question {i + 1}:** {question['question']}")
@@ -933,13 +1222,15 @@ elif page == "Quiz":
                         st.success("Correct")
                     else:
                         st.error("Incorrect")
-            if st.button("Prepare another quiz", key="prepare_another_quiz"):
-                st.session_state.questions = []
-                st.session_state.quiz_result = None
-                st.session_state.quiz_topic = None
-                st.rerun()
-        elif not st.session_state.questions:
-            empty_state("No quiz prepared yet", "Choose a learning topic above and generate questions from the processed transcript.")
+            if st.button("Want another 5? Generate new questions", key="another_five_after_result", use_container_width=True):
+                new_set = create_and_store_quiz_set()
+                if new_set:
+                    st.success(f"Question Set {new_set['set_number']} created. Your previous sets have been kept.")
+                    st.rerun()
+                else:
+                    st.warning("No additional unused question contexts were found in this transcript.")
+        elif not questions:
+            empty_state("No quiz prepared yet", "Generate your first five-question assessment. You can create more sets and reopen earlier ones at any time.")
 
 
 # -------------------- Analytics --------------------
@@ -974,14 +1265,14 @@ elif page == "Analytics":
 # -------------------- About --------------------
 elif page == "About":
     page_header("ABOUT THE PROJECT","Learning should be active, not passive.","LearnTube AI supports structured learning from educational video transcripts.")
-    st.markdown('<div class="hero"><div class="eyebrow">PROJECT OVERVIEW</div><h1 style="font-size:1.8rem">LearnTube AI</h1><p>An adaptive educational video learning platform that processes transcripts, identifies supported concepts, prepares concept-based quizzes, evaluates performance, and records learning progress.</p></div>',unsafe_allow_html=True)
+    st.markdown('<div class="hero"><div class="eyebrow">PROJECT OVERVIEW</div><h1 style="font-size:1.8rem">LearnTube AI</h1><p>An adaptive educational video learning platform that processes transcripts, identifies important ideas, prepares overall video quizzes, evaluates performance, and records learning progress.</p></div>',unsafe_allow_html=True)
     st.markdown('<div class="section-label">How the platform works</div>',unsafe_allow_html=True)
     a,b,c=st.columns(3)
-    for col,n,t,d in [(a,"01","Transcript processing","Add a YouTube video or paste its transcript. The text is cleaned and split into chunks."),(b,"02","Concept identification","The application extracts recurring topic phrases from the transcript."),(c,"03","Quiz and analytics","Generate topic-based questions, review your result, and track saved attempts.")]:
+    for col,n,t,d in [(a,"01","Transcript processing","Add a YouTube video or paste its transcript. The text is cleaned and split into chunks."),(b,"02","Concept identification","The application extracts recurring topic phrases from the transcript."),(c,"03","Quiz and analytics","Generate overall video question sets, review results, and track saved attempts.")]:
         with col: st.markdown(f'<div class="step-card"><div class="step-no">STAGE {n}</div><div class="step-name">{t}</div><div class="step-copy">{d}</div></div>',unsafe_allow_html=True)
     st.markdown('<div class="section-label">Core features</div>',unsafe_allow_html=True)
     f1,f2=st.columns(2)
-    with f1: st.markdown('<div class="panel"><div class="panel-title">Video-based learning</div><div class="panel-subtitle">Transcript input, cleaning, chunking, and supported concept identification.</div></div><div class="panel"><div class="panel-title">Concept-based quizzes</div><div class="panel-subtitle">Up to five transcript-context questions for a selected concept.</div></div>',unsafe_allow_html=True)
+    with f1: st.markdown('<div class="panel"><div class="panel-title">Video-based learning</div><div class="panel-subtitle">Transcript input, cleaning, chunking, and supported concept identification.</div></div><div class="panel"><div class="panel-title">Overall video quizzes</div><div class="panel-subtitle">Five-question assessments across the full transcript, with additional saved sets.</div></div>',unsafe_allow_html=True)
     with f2: st.markdown('<div class="panel"><div class="panel-title">Performance feedback</div><div class="panel-subtitle">Score calculation, answer review, and performance-level feedback.</div></div><div class="panel"><div class="panel-title">Learning analytics</div><div class="panel-subtitle">Quiz history and score analytics stored using GitHub-backed JSON.</div></div>',unsafe_allow_html=True)
     st.markdown('<div class="section-label">Technology stack</div>',unsafe_allow_html=True)
     st.markdown('<span class="concept-chip">Python</span><span class="concept-chip">Streamlit</span><span class="concept-chip">Pandas</span><span class="concept-chip">YouTube Transcript API</span><span class="concept-chip">Requests</span><span class="concept-chip">GitHub API</span>',unsafe_allow_html=True)
