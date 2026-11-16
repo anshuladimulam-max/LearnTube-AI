@@ -1,3 +1,4 @@
 streamlit
 pandas
 youtube-transcript-api
+requests
