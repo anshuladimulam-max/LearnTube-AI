@@ -334,5 +334,78 @@
         "is_correct": false
       }
     ]
+  },
+  {
+    "attempt_id": "421a283e-28e4-4630-b493-61a38490d725",
+    "quiz_set_id": "f1ad89af-12d0-484c-8d64-319bc170fe42",
+    "completed_at_utc": "2026-11-16T13:41:11.762067+00:00",
+    "video_title": "YouTube video JxgmHe2NyeY",
+    "video_url": "https://youtu.be/JxgmHe2NyeY?si=W_oWvfj4H9LRNyaT",
+    "topic": "Entire video",
+    "score": 2,
+    "total": 5,
+    "percentage": 40,
+    "questions": [
+      {
+        "question": "According to the video, complete the statement:\n\n________ be able to see that based on this input features the independent feature we need to determine whether",
+        "options": [
+          "head here you'll",
+          "Matrix so I'm",
+          "columns is equal",
+          "best fit line"
+        ],
+        "correct_answer": "head here you'll",
+        "user_answer": "columns is equal",
+        "is_correct": false
+      },
+      {
+        "question": "According to the video, complete the statement:\n\n________ to DF do Target so if I execute this and now if I probably print my data set",
+        "options": [
+          "head here you'll",
+          "Matrix so I'm",
+          "columns is equal",
+          "best fit line"
+        ],
+        "correct_answer": "columns is equal",
+        "user_answer": "Matrix so I'm",
+        "is_correct": false
+      },
+      {
+        "question": "According to the video, complete the statement:\n\n________ uh import so this basic things I have with me so I will go and take any data set that I want from SK learn.",
+        "options": [
+          "head here you'll",
+          "pyplot as PLT",
+          "best fit line",
+          "columns is equal"
+        ],
+        "correct_answer": "pyplot as PLT",
+        "user_answer": "columns is equal",
+        "is_correct": false
+      },
+      {
+        "question": "According to the video, complete the statement:\n\nshort what we are going to do in linear regression is that we'll try to find out a ________ which will actually help us to do the prediction that basically means if I get my new age",
+        "options": [
+          "columns is equal",
+          "best fit line",
+          "Matrix so I'm",
+          "head here you'll"
+        ],
+        "correct_answer": "best fit line",
+        "user_answer": "best fit line",
+        "is_correct": true
+      },
+      {
+        "question": "According to the video, complete the statement:\n\n________ going to write from SK learn import let's say I'm saying from skarn do Matrix import r² R2",
+        "options": [
+          "head here you'll",
+          "best fit line",
+          "Matrix so I'm",
+          "columns is equal"
+        ],
+        "correct_answer": "Matrix so I'm",
+        "user_answer": "Matrix so I'm",
+        "is_correct": true
+      }
+    ]
   }
 ]
