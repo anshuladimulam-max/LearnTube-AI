@@ -262,5 +262,77 @@
         "is_correct": false
       }
     ]
+  },
+  {
+    "attempt_id": "53d809fd-f90e-4305-b275-b8ba4a1618a9",
+    "completed_at_utc": "2026-11-16T12:24:19.995372+00:00",
+    "video_title": "YouTube video JxgmHe2NyeY",
+    "video_url": "https://youtu.be/JxgmHe2NyeY?si=0G-xxhsFfiIf_pFt",
+    "topic": "Neural Networks",
+    "score": 0,
+    "total": 5,
+    "percentage": 0,
+    "questions": [
+      {
+        "question": "Complete the statement from the transcript:\n\nto basically mimic human brain so when I say mimicking human brain that basically means we are trying to mimic the human brain to implement something to learn something so for this you use something called as multi-layered ________ so this is what deep learning is it is a subset of machine learning its",
+        "options": [
+          "Machine Learning",
+          "Deep Learning",
+          "Neural Networks",
+          "Natural Language Processing"
+        ],
+        "correct_answer": "Neural Networks",
+        "user_answer": "Deep Learning",
+        "is_correct": false
+      },
+      {
+        "question": "Complete the statement from the transcript:\n\nsomething to learn something so for this you use something called as multi-layered ________ so this is what deep learning is it is a subset of machine learning its main aim is to mimic human brain so they actually create multi-layer neural network and this multi-layered neural network will basically help you to train",
+        "options": [
+          "Data Science",
+          "Classification",
+          "Neural Networks",
+          "Supervised Learning"
+        ],
+        "correct_answer": "Neural Networks",
+        "user_answer": "Classification",
+        "is_correct": false
+      },
+      {
+        "question": "Complete the statement from the transcript:\n\nso when I say mimicking human brain that basically means we are trying to mimic the human brain to implement something to learn something so for this you use something called as multi-layered ________",
+        "options": [
+          "Artificial Intelligence",
+          "Data Science",
+          "Neural Networks",
+          "Machine Learning"
+        ],
+        "correct_answer": "Neural Networks",
+        "user_answer": "Data Science",
+        "is_correct": false
+      },
+      {
+        "question": "Complete the statement from the transcript:\n\ntrying to mimic the human brain to implement something to learn something so for this you use something called as multi-layered ________ so this is what deep learning is it is a subset of",
+        "options": [
+          "Neural Networks",
+          "Data Science",
+          "Machine Learning",
+          "Artificial Intelligence"
+        ],
+        "correct_answer": "Neural Networks",
+        "user_answer": "Data Science",
+        "is_correct": false
+      },
+      {
+        "question": "Complete the statement from the transcript:\n\nso for this you use something called as multi-layered ________ so this is what deep learning is it is a subset of machine learning its main aim is to mimic human brain so they",
+        "options": [
+          "Data Science",
+          "Clustering",
+          "Artificial Intelligence",
+          "Neural Networks"
+        ],
+        "correct_answer": "Neural Networks",
+        "user_answer": "Clustering",
+        "is_correct": false
+      }
+    ]
   }
 ]
