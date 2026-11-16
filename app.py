@@ -111,6 +111,8 @@ def save_attempt(attempt):
 
 
 # -------------------- Learning and quiz helpers --------------------
+# A small seed vocabulary is retained as a fallback, but topic detection is
+# transcript-driven so the app is not restricted to machine-learning videos.
 CONCEPTS = [
     "Artificial Intelligence", "Machine Learning", "Deep Learning",
     "Data Science", "Neural Networks", "Linear Regression",
@@ -120,9 +122,90 @@ CONCEPTS = [
 
 QUIZ_QUESTION_COUNT = 5
 
+_STOPWORDS = set("""a an the and or but if then else when while where what which who whom
+whose why how is am are was were be been being do does did have has had can could
+may might must shall should will would to of in on at by for from with about into
+onto over under after before between through during as it its this that these those
+i you he she we they them their his her our your my me us not no yes so than too
+very also just only more most much many some any each every all both few other such
+same own up down out off again further once here there then because until unless
+than like get got make made use used using one two three first second new old
+thing things way ways example examples people person time times video videos
+lesson lessons topic topics today really want going go went come came say says said
+know think thought see seen look looking learn learning learned understand
+understanding show shows shown explain explained explanation""".split())
 
-def identify_concepts(text):
-    return [concept for concept in CONCEPTS if concept.lower() in text.lower()]
+
+def identify_concepts(text, limit=18):
+    """Extract recurring topic terms and phrases from a transcript.
+
+    This is language-agnostic only to the extent of basic Latin-word tokenizing;
+    it is not semantic understanding. It can surface topics from many domains
+    without relying on a fixed subject list.
+    """
+    if not text or not text.strip():
+        return []
+
+    sentences = re.split(r"(?<=[.!?])\s+|[\r\n]+", text)
+    phrase_counts = {}
+    display_forms = {}
+    word_counts = {}
+    word_display = {}
+
+    for sentence in sentences:
+        tokens = re.findall(r"[A-Za-z][A-Za-z0-9+#.'-]*", sentence)
+        normalized = [t.strip(".'-").lower() for t in tokens]
+        originals = [t.strip(".'-") for t in tokens]
+        for word, original in zip(normalized, originals):
+            if word and word not in _STOPWORDS and len(word) >= 4:
+                word_counts[word] = word_counts.get(word, 0) + 1
+                word_display.setdefault(word, original)
+        for n in (2, 3):
+            for i in range(len(normalized) - n + 1):
+                gram = normalized[i:i+n]
+                if any(not w or w in _STOPWORDS for w in gram):
+                    continue
+                if any(len(w) < 3 for w in gram):
+                    continue
+                key = " ".join(gram)
+                phrase_counts[key] = phrase_counts.get(key, 0) + 1
+                display_forms.setdefault(key, " ".join(originals[i:i+n]))
+
+    ranked = []
+    for phrase, count in phrase_counts.items():
+        if count >= 2:
+            words = phrase.split()
+            score = count * (1.0 + 0.7 * (len(words) - 1))
+            ranked.append((score, count, phrase, display_forms[phrase]))
+
+    # If the transcript has few repeated phrases, use repeated content words
+    # rather than returning an empty concept list for a valid long transcript.
+    for word, count in word_counts.items():
+        if count >= 3:
+            ranked.append((count * 0.85, count, word, word_display[word]))
+
+    ranked.sort(key=lambda item: (-item[0], -item[1], item[2]))
+    results, seen = [], set()
+    for _, _, phrase, label in ranked:
+        normalized_phrase = phrase.casefold()
+        if normalized_phrase in seen:
+            continue
+        # Avoid duplicate nested labels such as "cell" beside "cell division".
+        if len(phrase.split()) == 1 and any(phrase in x.split() for x in seen):
+            continue
+        results.append(label)
+        seen.add(normalized_phrase)
+        if len(results) >= limit:
+            break
+
+    # Keep familiar ML terms when present, but never restrict other subjects.
+    for known in CONCEPTS:
+        if _concept_regex(known).search(text) and known.casefold() not in seen:
+            results.append(known)
+            seen.add(known.casefold())
+            if len(results) >= limit:
+                break
+    return results
 
 
 def clean_transcript(text):
@@ -208,27 +291,23 @@ def _candidate_contexts(transcript, selected, max_words=55):
         if not pattern.search(sentence):
             continue
         words = sentence.split()
-        if 5 <= len(words) <= max_words:
+        if 6 <= len(words) <= max_words:
             candidates.append(sentence)
         elif len(words) > max_words:
-            # Keep a focused window around the concept instead of using a
-            # very long paragraph as one unreadable question.
-            for left in range(0, len(words), 25):
+            for left in range(0, len(words), 20):
                 window = " ".join(words[left:left + max_words])
-                if len(window.split()) >= 5 and pattern.search(window):
+                if 6 <= len(window.split()) <= max_words and pattern.search(window):
                     candidates.append(window)
 
-    # Captions often arrive as one long line with no punctuation. Use
-    # overlapping word windows as a fallback, retaining only relevant ones.
+    # Captions often have no punctuation. Search overlapping windows.
     if len(candidates) < QUIZ_QUESTION_COUNT:
         words = transcript.split()
-        for left in range(0, max(1, len(words) - 4), 12):
-            window = " ".join(words[left:left + 35])
-            if 5 <= len(window.split()) <= 35 and pattern.search(window):
+        for left in range(0, max(1, len(words) - 5), 15):
+            window = " ".join(words[left:left + 45])
+            if 6 <= len(window.split()) <= 45 and pattern.search(window):
                 candidates.append(window)
 
-    unique = []
-    seen = set()
+    unique, seen = [], set()
     for context in candidates:
         masked = pattern.sub(" CONCEPT ", context, count=1)
         normalized = re.sub(r"[^a-z0-9]+", " ", masked.casefold()).strip()
@@ -238,10 +317,41 @@ def _candidate_contexts(transcript, selected, max_words=55):
     return unique
 
 
+def _transcript_distractors(transcript, selected, detected, needed=3):
+    """Build distinct distractors from this transcript, not unrelated ML terms."""
+    selected_key = selected.casefold()
+    selected_words = set(re.findall(r"[a-z]+", selected_key))
+    pool = [x for x in detected if x.casefold() != selected_key]
+    seen = {x.casefold() for x in pool}
+
+    # Add content words from the same transcript if fewer than three other
+    # recurring phrases were found. Prefer repeated words, then use distinct
+    # source words as a last resort rather than inserting unrelated subjects.
+    words = re.findall(r"[A-Za-z][A-Za-z0-9+#'-]{3,}", transcript)
+    counts = {}
+    display = {}
+    for word in words:
+        key = word.lower()
+        if key in _STOPWORDS or key in selected_words:
+            continue
+        counts[key] = counts.get(key, 0) + 1
+        display.setdefault(key, word)
+    ordered = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    for minimum_count in (2, 1):
+        for key, count in ordered:
+            if count >= minimum_count and key not in seen:
+                pool.append(display[key])
+                seen.add(key)
+            if len(pool) >= needed:
+                return pool
+    return pool
+
+
 def generate_questions(transcript, selected, count=QUIZ_QUESTION_COUNT):
-    """
-    Build up to five transcript-grounded sentence-completion MCQs.
-    This is deterministic template-based generation, not an LLM.
+    """Create up to five transcript-grounded sentence-completion MCQs.
+
+    This is transparent, template-based generation. It does not claim to
+    understand the transcript like a generative language model.
     """
     if not transcript or not selected or count < 1:
         return []
@@ -250,35 +360,42 @@ def generate_questions(transcript, selected, count=QUIZ_QUESTION_COUNT):
     if not contexts:
         return []
 
-    # Prefer other concepts actually detected in this transcript. Fill the
-    # remaining choices from the supported concept list when needed.
-    detected = identify_concepts(transcript)
-    distractor_pool = [c for c in detected if c.casefold() != selected.casefold()]
-    distractor_pool += [
-        c for c in CONCEPTS
-        if c.casefold() != selected.casefold()
-        and c.casefold() not in {x.casefold() for x in distractor_pool}
-    ]
+    detected = identify_concepts(transcript, limit=40)
+    distractor_pool = _transcript_distractors(transcript, selected, detected, needed=3)
+    distractor_pool = [x for x in distractor_pool if x.casefold() != selected.casefold()]
+    # There must be three distinct transcript-derived alternatives. If the
+    # source does not support them, do not invent misleading answer choices.
+    if len({x.casefold() for x in distractor_pool}) < 3:
+        return []
 
-    seed_text = f"{selected.casefold()}|{transcript}"
+    seed_text = f"{selected.casefold()}|{transcript[:5000]}"
     rng = random.Random(int(hashlib.sha256(seed_text.encode("utf-8")).hexdigest()[:12], 16))
-    questions = []
+    questions, used_contexts = [], set()
 
-    for context in contexts[:max(1, min(count, QUIZ_QUESTION_COUNT))]:
+    for context in contexts:
         match = _concept_regex(selected).search(context)
         if not match:
             continue
-        question_text = context[:match.start()] + "________" + context[match.end():]
-        choices = rng.sample(distractor_pool, k=min(3, len(distractor_pool))) + [selected]
-        rng.shuffle(choices)
-        if len(choices) != 4 or len({c.casefold() for c in choices}) != 4:
+        question_text = context[:match.start()] + "□□□□" + context[match.end():]
+        normalized = re.sub(r"\W+", " ", question_text.casefold()).strip()
+        if normalized in used_contexts:
             continue
+        used_contexts.add(normalized)
+
+        # Prefer alternatives from the same transcript; avoid duplicates.
+        available = [x for x in distractor_pool if x.casefold() != selected.casefold()]
+        if len(available) < 3:
+            break
+        choices = rng.sample(available, 3) + [selected]
+        rng.shuffle(choices)
         questions.append({
             "question": "Complete the statement from the transcript:\n\n" + question_text,
             "options": choices,
             "answer": selected,
             "source_context": context,
         })
+        if len(questions) >= max(1, min(count, QUIZ_QUESTION_COUNT)):
+            break
 
     return questions
 
@@ -426,9 +543,9 @@ div[data-testid="stCode"] code,
 }
 /* Explicitly readable status panels: white text on dark status colours. */
 [data-testid="stAlert"] {
-  background: #49352d !important;
-  border: 1px solid #6a5147 !important;
-  border-left: 4px solid #c6a27c !important;
+  background: #3b514b !important;
+  border: 1px solid #536c64 !important;
+  border-left: 4px solid #b79a6a !important;
   color: #ffffff !important;
 }
 [data-testid="stAlert"] *,
@@ -487,7 +604,7 @@ if page == "Dashboard":
     d.metric("Learning status","In progress" if st.session_state.transcript else "Not started")
     st.markdown('<div class="section-label">Get started</div><div class="section-hint">Follow these steps to turn a video into an active learning session.</div>',unsafe_allow_html=True)
     x,y,z=st.columns(3)
-    for col,no,title,copy in [(x,"01","Add a video","Paste a YouTube link or provide its transcript."),(y,"02","Explore concepts","Review the supported concepts identified from the transcript."),(z,"03","Take a quiz","Answer topic-based questions and review your score.")]:
+    for col,no,title,copy in [(x,"01","Add a video","Paste a YouTube link or provide its transcript."),(y,"02","Explore concepts","Review recurring topic phrases extracted from the transcript."),(z,"03","Take a quiz","Answer topic-based questions and review your score.")]:
         with col: st.markdown(f'<div class="step-card"><div class="step-no">STEP {no}</div><div class="step-name">{title}</div><div class="step-copy">{copy}</div></div>',unsafe_allow_html=True)
     st.markdown('<div class="section-label">Continue learning</div>',unsafe_allow_html=True)
     left,right=st.columns([1.4,1])
@@ -575,9 +692,9 @@ elif page == "Video Learning":
 
         st.markdown('<div class="panel-title">Identified concepts</div>', unsafe_allow_html=True)
         if st.session_state.concepts:
-            st.markdown(''.join(f'<span class="concept-chip">{c}</span>' for c in st.session_state.concepts), unsafe_allow_html=True)
+            st.markdown(''.join(f'<span class="concept-chip">{html.escape(c)}</span>' for c in st.session_state.concepts), unsafe_allow_html=True)
         else:
-            st.warning("No supported concepts were found. The current concept detector uses a predefined list of 12 terms.")
+            st.warning("No recurring topic phrases were detected. Try a longer transcript with more complete explanations, or paste the transcript again.")
         with st.expander("Read processed transcript"):
             st.write(st.session_state.transcript)
 
@@ -599,7 +716,7 @@ elif page == "Video Learning":
                         st.warning("Fewer than five distinct transcript contexts were available, so the quiz contains only the questions that could be supported.")
                 else:
                     st.warning("No suitable sentence was found for this concept. Choose another concept or paste a longer transcript with explanatory sentences.")
-            st.caption("Question method: sentence completion using the selected concept and transcript context. Options come from the supported concept list; this is template-based generation, not an external AI/LLM question generator.")
+            st.caption("Question method: transcript-based sentence completion using recurring topic phrases. Answer choices are drawn from other recurring terms in the same transcript. This is lightweight keyphrase extraction and template-based question generation, not an external AI/LLM.")
     else:
         empty_state("Your workspace is ready", "Add a YouTube video or paste transcript text to begin.")
 
@@ -611,7 +728,7 @@ elif page == "Quiz":
     if not st.session_state.transcript:
         empty_state("No transcript available", "Go to Video Learning and process a transcript before generating a quiz.")
     elif not st.session_state.concepts:
-        empty_state("No supported concepts found", "Try a transcript containing one or more of the supported learning concepts.")
+        empty_state("No supported concepts found", "The detector looks for repeated topic words and phrases across many subject areas. Try a longer transcript with clear explanations, or paste a cleaner transcript.")
     else:
         qcol, overview = st.columns([1.35, 1])
         with qcol:
@@ -758,7 +875,7 @@ elif page == "About":
     st.markdown('<div class="hero"><div class="eyebrow">PROJECT OVERVIEW</div><h1 style="font-size:1.8rem">LearnTube AI</h1><p>An adaptive educational video learning platform that processes transcripts, identifies supported concepts, prepares concept-based quizzes, evaluates performance, and records learning progress.</p></div>',unsafe_allow_html=True)
     st.markdown('<div class="section-label">How the platform works</div>',unsafe_allow_html=True)
     a,b,c=st.columns(3)
-    for col,n,t,d in [(a,"01","Transcript processing","Add a YouTube video or paste its transcript. The text is cleaned and split into chunks."),(b,"02","Concept identification","The application checks the transcript for supported learning concepts."),(c,"03","Quiz and analytics","Generate topic-based questions, review your result, and track saved attempts.")]:
+    for col,n,t,d in [(a,"01","Transcript processing","Add a YouTube video or paste its transcript. The text is cleaned and split into chunks."),(b,"02","Concept identification","The application extracts recurring topic phrases from the transcript."),(c,"03","Quiz and analytics","Generate topic-based questions, review your result, and track saved attempts.")]:
         with col: st.markdown(f'<div class="step-card"><div class="step-no">STAGE {n}</div><div class="step-name">{t}</div><div class="step-copy">{d}</div></div>',unsafe_allow_html=True)
     st.markdown('<div class="section-label">Core features</div>',unsafe_allow_html=True)
     f1,f2=st.columns(2)
