@@ -69,5 +69,71 @@
         "concept": "Matrix so I'm"
       }
     ]
+  },
+  {
+    "set_id": "9b345ab3-d00f-4633-aebf-732e7ebb35d0",
+    "set_number": 1,
+    "created_at_utc": "2026-11-16T14:08:14.995804+00:00",
+    "transcript_hash": "84c48fef57b33e4591f4847e2ec7de21081a6ead28d679bba72b4e6b7a586770",
+    "video_title": "Pasted transcript",
+    "video_url": "",
+    "question_count": 5,
+    "questions": [
+      {
+        "question": "Which concept is being explained in this passage?\n\nDependent features now let's go ahead and discuss what is independent feature independent feature basically means in this this concept the input that I'm basically training in all those features becomes an independent feature now in this particular case my age is independent feature and whatever I'm",
+        "options": [
+          "particular case since",
+          "binary classification problem",
+          "derivative of theta",
+          "linear regression now"
+        ],
+        "answer": "particular case since",
+        "source_context": "dependent features now let's go ahead and discuss what is independent feature independent feature basically means in this particular case since the input that I'm basically training in all those features becomes an independent feature now in this particular case my age is independent feature and whatever I'm"
+      },
+      {
+        "question": "Which method or idea best matches the explanation below?\n\nBut the entropy of category 1 so entropy of category 1 is nothing but 81 plus then you go again back to the graph and try to see that for C2 how much how many these systems are there 3 + 3 is 6 so 6",
+        "options": [
+          "total number of samples",
+          "house pricing data set",
+          "weak learner weak learner",
+          "cluster sum of square"
+        ],
+        "answer": "total number of samples",
+        "source_context": "but the entropy of category 1 so entropy of category 1 is nothing but 81 plus then you go again back to the graph and try to see that for C2 how much how many total number of samples are there 3 + 3 is 6 so 6"
+      },
+      {
+        "question": "What concept is associated with the role described here?\n\nHigh variance because obviously it is not this concept this is another scenario last the last scenario is that this is the scenario that we want because it is low bias and low variance okay many many people have basically asked me the definition with respect to bias",
+        "options": [
+          "convergence algorithm",
+          "performing well",
+          "definitely write",
+          "particular point"
+        ],
+        "answer": "performing well",
+        "source_context": "High variance because obviously it is not performing well this is another scenario last the last scenario is that this is the scenario that we want because it is low bias and low variance okay many many people have basically asked me the definition with respect to bias"
+      },
+      {
+        "question": "Identify the concept that this explanation refers to.\n\nThere now with respect to this this concept what I will do is that the first step that I will do from this particular data set I will just take up some rows so I'll basically do row sampling and I'll take a row sampling of D Dash",
+        "options": [
+          "particular model",
+          "convergence algorithm",
+          "particular point",
+          "definitely write"
+        ],
+        "answer": "particular model",
+        "source_context": "there now with respect to this particular model what I will do is that the first step that I will do from this particular data set I will just take up some rows so I'll basically do row sampling and I'll take a row sampling of D Dash"
+      },
+      {
+        "question": "Which term best represents the idea discussed in this passage?\n\nRegression cost function but there is one problem we cannot we cannot use we cannot use this cost function there is a reason for this because this equation that you're seeing 1/ 1 + e^ of minus Theta 1 * X this is a non-this concept now you",
+        "options": [
+          "convergence algorithm",
+          "particular point",
+          "definitely write",
+          "convex function"
+        ],
+        "answer": "convex function",
+        "source_context": "regression cost function but there is one problem we cannot we cannot use we cannot use this cost function there is a reason for this because this equation that you're seeing 1/ 1 + e^ of minus Theta 1 * X this is a non-convex function now you"
+      }
+    ]
   }
 ]
