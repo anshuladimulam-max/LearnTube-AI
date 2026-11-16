@@ -424,12 +424,46 @@ div[data-testid="stCode"] code,
   background: #263431 !important;
   opacity: 1 !important;
 }
+/* Explicitly readable status panels: white text on dark status colours. */
+[data-testid="stAlert"] {
+  background: #49352d !important;
+  border: 1px solid #6a5147 !important;
+  border-left: 4px solid #c6a27c !important;
+  color: #ffffff !important;
+}
+[data-testid="stAlert"] *,
+[data-testid="stAlert"] p,
+[data-testid="stAlert"] span,
+[data-testid="stAlert"] div,
+[data-testid="stAlert"] [data-testid="stMarkdownContainer"],
+[data-testid="stAlert"] [data-testid="stMarkdownContainer"] * {
+  color: #ffffff !important;
+  opacity: 1 !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+/* Expander header (e.g. Review your answers) must contrast with its dark bar. */
+[data-testid="stExpander"] details > summary,
+[data-testid="stExpander"] details > summary *,
 [data-testid="stExpander"] summary,
 [data-testid="stExpander"] summary span,
-[data-testid="stExpander"] summary p {
+[data-testid="stExpander"] summary p,
+[data-testid="stExpander"] summary svg {
+  background-color: #263431 !important;
+  color: #ffffff !important;
+  fill: #ffffff !important;
+  opacity: 1 !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+[data-testid="stExpander"] details > summary { border-radius: 8px 8px 0 0 !important; }
+[data-testid="stExpander"] [data-testid="stExpanderDetails"] {
+  background: #ffffff !important;
   color: #202b2a !important;
+}
+[data-testid="stExpander"] [data-testid="stExpanderDetails"] * {
   opacity: 1 !important;
 }
+/* Keep error feedback legible even when Streamlit applies its own nested styles. */
+[data-testid="stAlert"] svg { color: #ffffff !important; fill: #ffffff !important; }
 </style>""", unsafe_allow_html=True)
 
 st.sidebar.markdown('''<div style="padding:18px 4px 20px"><div style="font-size:2.1rem">🎓</div>
