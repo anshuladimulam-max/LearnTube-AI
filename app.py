@@ -753,8 +753,8 @@ elif page == "Video Learning":
                         text = extract_transcript(video_id)
                 except Exception as exc:
                     error_text = str(exc)
-                    if "YOUTUBE_CLOUD_BLOCK" in error_text:
-                        st.error("YouTube is blocking caption requests from the Streamlit Cloud server. Your video link is valid; this is a hosting restriction, not a language or URL problem.")
+                    if "YOUTUBE_REQUEST_BLOCKED" in error_text or "YOUTUBE_CLOUD_BLOCK" in error_text or "RequestBlocked" in error_text or "blocking requests from your IP" in error_text:
+                        st.error("YouTube blocked the caption request from this server. The URL was accepted, but the hosting IP was refused. This is not a transcript-language or URL-format error.")
                     else:
                         st.warning("Automatic captions could not be retrieved. Captions may be disabled or restricted for this video.")
                     st.markdown("**Use the reliable transcript input below:** open the video on YouTube → select **Show transcript** → copy the transcript → paste it into the transcript box, or save it as a `.txt`, `.srt`, or `.vtt` file and upload it.")
