@@ -235,323 +235,236 @@ def youtube_video_id(url):
 
 # -------------------- Session state --------------------
 defaults = {
-    "transcript": "",
-    "concepts": [],
-    "chunks": [],
-    "questions": [],
-    "score": None,
-    "quiz_result": None,
-    "quiz_number": 0,
-    "video_url": "",
-    "video_title": "",
-    "session_started": None,
-    "saved_attempt_ids": [],
+    "transcript": "", "concepts": [], "chunks": [], "questions": [],
+    "score": None, "quiz_result": None, "quiz_number": 0, "video_url": "",
+    "video_title": "", "session_started": None, "saved_attempt_ids": [],
 }
 for key, default in defaults.items():
     if key not in st.session_state:
         st.session_state[key] = default
 
-st.sidebar.markdown("""
-<div style="padding:10px 2px 18px 2px">
-  <div style="font-size:2rem">🎓</div>
-  <div style="font-size:1.35rem;font-weight:800;letter-spacing:-.03em">LearnTube AI</div>
-  <div style="font-size:.78rem;color:#cbd5e1 !important">Adaptive Video Learning</div>
-</div>
-""", unsafe_allow_html=True)
-st.sidebar.markdown("---")
-page = st.sidebar.radio(
-    "Navigation",
-    ["Dashboard", "Video Learning", "Quiz", "Analytics", "About"]
-)
-st.sidebar.markdown("---")
-st.sidebar.caption("Learn smarter, one video at a time.")
+# -------------------- Shared presentation helpers --------------------
+def page_header(kicker, title, subtitle):
+    st.markdown(f'''<div class="page-head"><div class="kicker">{kicker}</div>
+    <h1>{title}</h1><p>{subtitle}</p></div>''', unsafe_allow_html=True)
+
+def panel_title(title, subtitle=None):
+    st.markdown(f'<div class="panel-title">{title}</div>' + (f'<div class="panel-subtitle">{subtitle}</div>' if subtitle else ''), unsafe_allow_html=True)
+
+def empty_state(title, message):
+    st.markdown(f'''<div class="empty-state"><div class="empty-icon">✦</div>
+    <div class="empty-title">{title}</div><div class="empty-copy">{message}</div></div>''', unsafe_allow_html=True)
+
+st.markdown('''<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
+:root{--ink:#172554;--muted:#64748b;--blue:#3657d6;--purple:#7957d5;--line:#e7ebf3;}
+html,body,[class*="css"]{font-family:'DM Sans',sans-serif}
+.stApp{background:#f6f8fc;color:#172033}
+.block-container{max-width:1240px;padding-top:2rem;padding-bottom:3rem}
+[data-testid="stHeader"]{background:rgba(246,248,252,.88)}
+[data-testid="stSidebar"]{background:#111d3d;border-right:1px solid #25345c}
+[data-testid="stSidebar"] *{color:#f8faff}
+[data-testid="stSidebar"] [data-testid="stRadio"] label{padding:11px 13px;border-radius:11px;font-weight:600}
+[data-testid="stSidebar"] [data-testid="stRadio"] label:hover{background:#ffffff16}
+[data-testid="stSidebar"] hr{border-color:#ffffff24}
+[data-testid="stMetric"]{background:#fff;border:1px solid var(--line);border-radius:15px;padding:17px 19px;box-shadow:0 5px 18px #17255408}
+[data-testid="stMetricLabel"]{color:#64748b;font-weight:600}
+[data-testid="stMetricValue"]{color:var(--ink);font-weight:800}
+.stButton>button,.stFormSubmitButton>button{border:0;border-radius:10px;padding:.62rem 1.15rem;font-weight:700;color:#fff;background:linear-gradient(100deg,var(--blue),var(--purple));box-shadow:0 5px 13px #3657d626}
+.stButton>button:hover,.stFormSubmitButton>button:hover{color:white;border:0;transform:translateY(-1px)}
+[data-testid="stTextInput"] input,[data-testid="stTextArea"] textarea,[data-baseweb="select"]>div{border:1px solid #dce3ef;border-radius:10px;background:#fff}
+[data-testid="stExpander"], [data-testid="stDataFrame"]{border:1px solid var(--line);border-radius:12px;background:#fff}
+hr{border-color:var(--line)}
+h1,h2,h3{color:var(--ink);letter-spacing:-.035em}
+.page-head{margin:0 0 22px}.kicker{color:#5369c8;font-size:.72rem;font-weight:800;letter-spacing:.15em;text-transform:uppercase;margin-bottom:7px}
+.page-head h1{font-size:2.05rem;font-weight:800;margin:0 0 5px}.page-head p{color:#64748b;margin:0;font-size:.98rem}
+.hero{background:linear-gradient(115deg,#172554 0%,#3049a4 58%,#7957d5 100%);padding:32px 34px;border-radius:22px;color:#fff;box-shadow:0 15px 35px #243b8b20;margin-bottom:22px}
+.hero .eyebrow{font-size:.72rem;letter-spacing:.16em;font-weight:800;color:#dbe4ff;text-transform:uppercase}.hero h1{color:#fff;font-size:2.25rem;margin:9px 0 7px;font-weight:800}.hero p{color:#edf1ff;max-width:720px;margin:0;font-size:1rem;line-height:1.6}
+.section-label{font-size:1.12rem;font-weight:800;color:#172554;margin:24px 0 4px}.section-hint{font-size:.87rem;color:#748098;margin-bottom:13px}
+.panel{background:#fff;border:1px solid var(--line);border-radius:16px;padding:19px 20px;margin:10px 0;box-shadow:0 5px 18px #17255407}
+.panel-title{font-weight:800;color:#172554;font-size:1.02rem;margin-bottom:5px}.panel-subtitle{color:#748098;font-size:.86rem;margin-bottom:12px}
+.empty-state{background:#fff;border:1px dashed #cbd5e1;border-radius:16px;padding:32px 20px;text-align:center;margin:15px 0}.empty-icon{font-size:1.7rem;color:#6478d8}.empty-title{font-size:1.05rem;font-weight:800;color:#172554;margin:7px}.empty-copy{color:#748098;font-size:.9rem;max-width:560px;margin:auto}
+.concept-chip{display:inline-block;padding:8px 12px;border-radius:9px;background:#eef2ff;color:#354db0;font-weight:700;font-size:.82rem;margin:4px 5px 4px 0;border:1px solid #e0e7ff}
+.step-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;height:100%}.step-no{font-size:.72rem;font-weight:800;color:#6478d8;letter-spacing:.12em}.step-name{font-size:.98rem;font-weight:800;color:#172554;margin:7px 0 4px}.step-copy{font-size:.83rem;color:#748098;line-height:1.5}
+@media(max-width:700px){.block-container{padding:1rem}.hero{padding:23px}.hero h1{font-size:1.7rem}.page-head h1{font-size:1.7rem}}
+</style>''', unsafe_allow_html=True)
+
+st.sidebar.markdown('''<div style="padding:18px 4px 20px"><div style="font-size:2.1rem">🎓</div>
+<div style="font-size:1.35rem;font-weight:800;letter-spacing:-.04em">LearnTube AI</div>
+<div style="font-size:.78rem;color:#bdc9e8">ADAPTIVE VIDEO LEARNING</div></div>''', unsafe_allow_html=True)
+st.sidebar.markdown('---')
+st.sidebar.markdown('<div style="font-size:.72rem;color:#9eadd0;letter-spacing:.13em;font-weight:800;padding:4px 10px 9px">WORKSPACE</div>', unsafe_allow_html=True)
+page = st.sidebar.radio("Navigation", ["Dashboard", "Video Learning", "Quiz", "Analytics", "About"], label_visibility="collapsed")
+st.sidebar.markdown('---')
+st.sidebar.markdown('<div style="padding:8px 10px;color:#aab8d8;font-size:.78rem;line-height:1.6">Learn smarter.<br>One video at a time.</div>', unsafe_allow_html=True)
 
 # -------------------- Dashboard --------------------
 if page == "Dashboard":
-    st.markdown("""
-    <div class="lt-hero">
-      <div class="lt-eyebrow">YOUR PERSONAL LEARNING SPACE</div>
-      <h1>LearnTube AI</h1>
-      <p>Turn educational videos into structured learning. Explore key concepts, practise with transcript-based quizzes, and track your progress.</p>
-    </div>
-    """, unsafe_allow_html=True)
-    st.markdown("### Learning overview")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Concepts Identified", len(st.session_state.concepts))
-    col2.metric("Transcript Chunks", len(st.session_state.chunks))
-    col3.metric(
-        "Latest Quiz Score",
-        f"{st.session_state.score}%" if st.session_state.score is not None
-        else "Not attempted"
-    )
-    st.markdown("""
-    <div class="lt-section">
-      <strong>Ready to continue learning?</strong><br>
-      <span style="color:#64748b">Open Video Learning to add a YouTube video or paste its transcript. LearnTube AI will identify supported concepts and prepare a quiz.</span>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown('''<div class="hero"><div class="eyebrow">YOUR PERSONAL LEARNING SPACE</div>
+    <h1>LearnTube AI</h1><p>Turn educational videos into structured learning. Discover key concepts, practise with transcript-based quizzes, and follow your learning progress in one place.</p></div>''', unsafe_allow_html=True)
+    st.markdown('<div class="section-label">Your learning at a glance</div><div class="section-hint">A quick summary of your current learning session.</div>', unsafe_allow_html=True)
+    a,b,c,d=st.columns(4)
+    a.metric("Concepts found",len(st.session_state.concepts),help="Supported concepts identified in the current transcript")
+    b.metric("Transcript chunks",len(st.session_state.chunks))
+    c.metric("Latest quiz score",f"{st.session_state.score}%" if st.session_state.score is not None else "—")
+    d.metric("Learning status","In progress" if st.session_state.transcript else "Not started")
+    st.markdown('<div class="section-label">Get started</div><div class="section-hint">Follow these steps to turn a video into an active learning session.</div>',unsafe_allow_html=True)
+    x,y,z=st.columns(3)
+    for col,no,title,copy in [(x,"01","Add a video","Paste a YouTube link or provide its transcript."),(y,"02","Explore concepts","Review the supported concepts identified from the transcript."),(z,"03","Take a quiz","Answer topic-based questions and review your score.")]:
+        with col: st.markdown(f'<div class="step-card"><div class="step-no">STEP {no}</div><div class="step-name">{title}</div><div class="step-copy">{copy}</div></div>',unsafe_allow_html=True)
+    st.markdown('<div class="section-label">Continue learning</div>',unsafe_allow_html=True)
+    left,right=st.columns([1.4,1])
+    with left:
+        if st.session_state.transcript:
+            st.markdown(f'<div class="panel"><div class="panel-title">{st.session_state.video_title or "Current learning session"}</div><div class="panel-subtitle">{len(st.session_state.transcript.split())} words · {len(st.session_state.chunks)} chunks</div><span class="concept-chip">Transcript processed</span></div>',unsafe_allow_html=True)
+        else: empty_state("No active video yet","Open Video Learning to add a YouTube video or paste a transcript.")
+    with right:
+        st.markdown('<div class="panel"><div class="panel-title">Learning tip</div><div class="panel-subtitle">For better quiz results, use a transcript with clear explanations and enough context for each concept.</div></div>',unsafe_allow_html=True)
 
 # -------------------- Video learning --------------------
 elif page == "Video Learning":
-    st.title("📺 Video Learning Workspace")
-    url = st.text_input(
-        "Enter an educational YouTube URL",
-        value=st.session_state.video_url
-    )
-    transcript_input = st.text_area(
-        "Or paste the video transcript here", height=200
-    )
-
-    if st.button("Process Video / Transcript"):
-        text = transcript_input.strip()
+    page_header("LEARNING WORKSPACE","Video Learning","Bring an educational video into your learning workspace and explore its transcript.")
+    l,r=st.columns([1.25,.75],gap="large")
+    with l:
+        st.markdown('<div class="panel-title">01 · Add your learning material</div><div class="panel-subtitle">Use a YouTube URL with an available transcript, or paste transcript text directly.</div>',unsafe_allow_html=True)
+        url=st.text_input("YouTube video URL",value=st.session_state.video_url,placeholder="https://www.youtube.com/watch?v=...")
+        st.markdown('<div style="text-align:center;color:#94a3b8;font-size:.8rem;padding:2px">— OR PASTE TRANSCRIPT —</div>',unsafe_allow_html=True)
+        transcript_input=st.text_area("Transcript text",height=230,placeholder="Paste the video transcript here...")
+        process=st.button("✦  Process learning material",use_container_width=True)
+    with r:
+        st.markdown('<div class="panel"><div class="panel-title">How it works</div><div class="panel-subtitle">Your transcript is processed in three stages.</div><div class="step-no">01</div><b>Clean transcript</b><p style="color:#748098;font-size:.85rem">Normalize the text for analysis.</p><div class="step-no">02</div><b>Split into chunks</b><p style="color:#748098;font-size:.85rem">Divide transcript into manageable sections.</p><div class="step-no">03</div><b>Identify concepts</b><p style="color:#748098;font-size:.85rem">Find supported learning topics.</p></div>',unsafe_allow_html=True)
+        st.markdown('<div class="panel"><div class="panel-title">Supported input</div><div class="panel-subtitle">YouTube links and manually pasted transcript text.</div><span class="concept-chip">YouTube</span><span class="concept-chip">Transcript</span><span class="concept-chip">Concept analysis</span></div>',unsafe_allow_html=True)
+    if process:
+        text=transcript_input.strip()
         if not text and url:
-            video_id = youtube_video_id(url)
+            video_id=youtube_video_id(url)
             if video_id:
                 try:
-                    with st.spinner("Extracting YouTube transcript..."):
-                        text = extract_transcript(video_id)
-                except Exception as exc:
-                    st.warning(
-                        "Automatic transcript extraction failed. "
-                        "Please paste the transcript manually."
-                    )
-            else:
-                st.error("Please enter a valid YouTube URL.")
-
+                    with st.spinner("Extracting YouTube transcript..."): text=extract_transcript(video_id)
+                except Exception:
+                    st.warning("Automatic transcript extraction failed. Please paste the transcript manually.")
+            else: st.error("Please enter a valid YouTube URL.")
         if text:
-            st.session_state.transcript = clean_transcript(text)
-            st.session_state.chunks = split_transcript(st.session_state.transcript)
-            st.session_state.concepts = identify_concepts(st.session_state.transcript)
-            st.session_state.video_url = url.strip()
-            st.session_state.video_title = (
-                f"YouTube video {youtube_video_id(url)}"
-                if youtube_video_id(url) else "Pasted transcript"
-            )
-            st.session_state.session_started = datetime.now(timezone.utc).isoformat()
-            st.session_state.questions = []
-            st.session_state.quiz_result = None
-            st.session_state.score = None
+            st.session_state.transcript=clean_transcript(text)
+            st.session_state.chunks=split_transcript(st.session_state.transcript)
+            st.session_state.concepts=identify_concepts(st.session_state.transcript)
+            st.session_state.video_url=url.strip()
+            st.session_state.video_title=f"YouTube video {youtube_video_id(url)}" if youtube_video_id(url) else "Pasted transcript"
+            st.session_state.session_started=datetime.now(timezone.utc).isoformat()
+            st.session_state.questions=[]; st.session_state.quiz_result=None; st.session_state.score=None
             st.success("Transcript processed successfully!")
-
     if st.session_state.transcript:
-        st.subheader("Transcript Analysis")
-        st.write("Word count:", len(st.session_state.transcript.split()))
-        st.write("Chunks created:", len(st.session_state.chunks))
-        st.subheader("Identified Concepts")
+        st.markdown('<div class="section-label">Transcript analysis</div><div class="section-hint">Review the processing summary and concepts found.</div>',unsafe_allow_html=True)
+        m1,m2,m3=st.columns(3);m1.metric("Word count",f"{len(st.session_state.transcript.split()):,}");m2.metric("Chunks created",len(st.session_state.chunks));m3.metric("Concepts identified",len(st.session_state.concepts))
+        st.markdown('<div class="panel-title">Identified concepts</div>',unsafe_allow_html=True)
         if st.session_state.concepts:
-            st.write(st.session_state.concepts)
-        else:
-            st.warning("No predefined concepts found in this transcript.")
-        with st.expander("View processed transcript"):
-            st.write(st.session_state.transcript)
+            st.markdown(''.join(f'<span class="concept-chip">{c}</span>' for c in st.session_state.concepts),unsafe_allow_html=True)
+        else: st.warning("No predefined concepts found in this transcript.")
+        with st.expander("Read processed transcript"): st.write(st.session_state.transcript)
+    else: empty_state("Your workspace is ready","Add a YouTube video or paste transcript text to begin.")
 
 # -------------------- Quiz --------------------
 elif page == "Quiz":
-    st.title("📝 Adaptive Learning Quiz")
-    st.caption("The quiz generates up to 5 questions, depending on transcript content.")
-
+    page_header("CHECK YOUR UNDERSTANDING","Knowledge Check","Practise with questions based on concepts found in your processed transcript.")
     if not st.session_state.transcript:
-        st.warning("Process a transcript first in Video Learning.")
+        empty_state("No transcript available","Go to Video Learning and process a video transcript before generating a quiz.")
     elif not st.session_state.concepts:
-        st.warning("No predefined concepts found. Try another transcript.")
+        empty_state("No supported concepts found","Try another transcript containing one or more supported learning concepts.")
     else:
-        st.write("Select a topic and answer questions based on your video transcript.")
-        selected = st.selectbox("Select Learning Topic", st.session_state.concepts)
-
-        if st.button("Generate 5 Questions"):
-            questions = generate_questions(
-                st.session_state.transcript,
-                selected,
-                count=QUIZ_QUESTION_COUNT
-            )
-            if questions:
-                st.session_state.questions = questions
-                st.session_state.quiz_topic = selected
-                st.session_state.quiz_result = None
-                st.session_state.quiz_number += 1
-                if len(questions) == QUIZ_QUESTION_COUNT:
-                    st.success("5 questions generated successfully!")
+        top1,top2=st.columns([1.4,1])
+        with top1:
+            st.markdown('<div class="panel-title">Choose your quiz topic</div><div class="panel-subtitle">Select one of the concepts identified in your transcript.</div>',unsafe_allow_html=True)
+            selected=st.selectbox("Learning topic",st.session_state.concepts,label_visibility="collapsed")
+            if st.button("Generate quiz questions",use_container_width=True):
+                questions=generate_questions(st.session_state.transcript,selected,count=QUIZ_QUESTION_COUNT)
+                if questions:
+                    st.session_state.questions=questions;st.session_state.quiz_topic=selected;st.session_state.quiz_result=None;st.session_state.quiz_number+=1
+                    if len(questions)==QUIZ_QUESTION_COUNT: st.success("Your quiz is ready!")
+                    else: st.info(f"Only {len(questions)} suitable question(s) were found. A shorter quiz is ready.")
                 else:
-                    st.info(
-                        f"Only {len(questions)} suitable question(s) were found "
-                        "in this transcript. A partial quiz has been created."
-                    )
-            else:
-                st.session_state.questions = []
-                st.session_state.quiz_result = None
-                st.warning(
-                    "No suitable questions could be created for this topic. "
-                    "Please use a longer transcript or select another topic."
-                )
-
-        questions = st.session_state.questions
+                    st.session_state.questions=[];st.session_state.quiz_result=None
+                    st.warning("No suitable questions could be created. Use a longer transcript or select another topic.")
+        with top2:
+            st.markdown(f'<div class="panel"><div class="panel-title">Quiz overview</div><div class="panel-subtitle">Your selected learning material</div><div style="font-size:1.3rem;font-weight:800;color:#263b85">{len(st.session_state.concepts)} topics</div><p style="color:#748098;font-size:.85rem">Up to five questions per quiz, depending on available transcript context.</p></div>',unsafe_allow_html=True)
+        questions=st.session_state.questions
         if questions:
-            st.divider()
-            st.subheader(f"Topic: {st.session_state.quiz_topic}")
-            total_questions = len(questions)
-            st.write(f"Total Questions: {total_questions}")
-
+            st.markdown('<div class="section-label">Your quiz</div>',unsafe_allow_html=True)
+            st.markdown(f'<div class="panel-title">{st.session_state.quiz_topic}</div><div class="panel-subtitle">{len(questions)} question(s) · Select one answer for each question.</div>',unsafe_allow_html=True)
             with st.form(f"quiz_form_{st.session_state.quiz_number}"):
-                answers = []
-                for i, question in enumerate(questions):
-                    st.markdown(f"### Question {i + 1}")
-                    st.write(question["question"])
-                    answer = st.radio(
-                        "Choose your answer:",
-                        question["options"],
-                        index=None,
-                        key=f"quiz_{st.session_state.quiz_number}_{i}"
-                    )
-                    answers.append(answer)
-                    st.divider()
-                submitted = st.form_submit_button("Submit Quiz")
-
+                answers=[]
+                for i,q in enumerate(questions):
+                    st.markdown(f'''<div class="panel-title" style="margin-top:8px">QUESTION {i+1:02d} <span style="color:#94a3b8;font-weight:500">/ {len(questions):02d}</span></div>''',unsafe_allow_html=True)
+                    st.progress((i+1)/len(questions))
+                    st.markdown(f'<div style="font-size:1rem;font-weight:600;color:#24345e;margin:8px 0 12px">{q["question"]}</div>',unsafe_allow_html=True)
+                    ans=st.radio("Choose your answer",q["options"],index=None,key=f"quiz_{st.session_state.quiz_number}_{i}",label_visibility="collapsed")
+                    answers.append(ans);st.divider()
+                submitted=st.form_submit_button("Submit answers",use_container_width=True)
             if submitted:
-                if any(answer is None for answer in answers):
-                    st.warning(
-                        f"Please answer all {total_questions} question(s) before submitting."
-                    )
+                if any(a is None for a in answers): st.warning(f"Please answer all {len(questions)} questions before submitting.")
                 else:
-                    correct = sum(
-                        answers[i] == questions[i]["answer"]
-                        for i in range(total_questions)
-                    )
-                    percentage = round(correct / total_questions * 100)
-                    attempt_id = str(uuid.uuid4())
-                    completed_at = datetime.now(timezone.utc).isoformat()
-
-                    result = {
-                        "answers": answers,
-                        "correct": correct,
-                        "total": total_questions,
-                        "percentage": percentage,
-                        "attempt_id": attempt_id,
-                    }
-                    st.session_state.quiz_result = result
-                    st.session_state.score = percentage
-
-                    attempt = {
-                        "attempt_id": attempt_id,
-                        "completed_at_utc": completed_at,
-                        "video_title": st.session_state.video_title,
-                        "video_url": st.session_state.video_url,
-                        "topic": st.session_state.quiz_topic,
-                        "score": correct,
-                        "total": total_questions,
-                        "percentage": percentage,
-                        "questions": [
-                            {
-                                "question": questions[i]["question"],
-                                "options": questions[i]["options"],
-                                "correct_answer": questions[i]["answer"],
-                                "user_answer": answers[i],
-                                "is_correct": answers[i] == questions[i]["answer"],
-                            }
-                            for i in range(total_questions)
-                        ],
-                    }
-
+                    correct=sum(answers[i]==questions[i]["answer"] for i in range(len(questions)))
+                    percentage=round(correct/len(questions)*100);attempt_id=str(uuid.uuid4());completed_at=datetime.now(timezone.utc).isoformat()
+                    result={"answers":answers,"correct":correct,"total":len(questions),"percentage":percentage,"attempt_id":attempt_id}
+                    st.session_state.quiz_result=result;st.session_state.score=percentage
+                    attempt={"attempt_id":attempt_id,"completed_at_utc":completed_at,"video_title":st.session_state.video_title,"video_url":st.session_state.video_url,"topic":st.session_state.quiz_topic,"score":correct,"total":len(questions),"percentage":percentage,"questions":[{"question":questions[i]["question"],"options":questions[i]["options"],"correct_answer":questions[i]["answer"],"user_answer":answers[i],"is_correct":answers[i]==questions[i]["answer"]} for i in range(len(questions))]}
                     try:
-                        with st.spinner("Saving your quiz attempt to GitHub..."):
-                            save_attempt(attempt)
-                        st.session_state.saved_attempt_ids.append(attempt_id)
-                        st.success("Quiz result saved permanently to GitHub analytics.")
-                    except Exception as exc:
-                        st.error(
-                            "Your quiz was scored, but permanent saving failed. "
-                            "Do not assume this attempt is stored. "
-                            f"Storage error: {exc}"
-                        )
-
+                        with st.spinner("Saving your quiz attempt to GitHub..."): save_attempt(attempt)
+                        st.session_state.saved_attempt_ids.append(attempt_id);st.success("Quiz result saved to GitHub analytics.")
+                    except Exception as exc: st.error(f"Your quiz was scored, but permanent saving failed: {exc}")
             if st.session_state.quiz_result:
-                result = st.session_state.quiz_result
-                st.divider()
-                st.subheader("📊 Quiz Results")
-                st.metric("Your Score", f"{result['correct']}/{result['total']}")
-                st.metric("Percentage", f"{result['percentage']}%")
-                st.subheader("Answer Review")
-                for i, question in enumerate(questions):
-                    st.markdown(f"**Question {i + 1}**")
-                    st.write(question["question"])
-                    st.write(f"Your Answer: {result['answers'][i]}")
-                    st.write(f"Correct Answer: {question['answer']}")
-                    if result["answers"][i] == question["answer"]:
-                        st.success("Correct answer!")
-                    else:
-                        st.error("Incorrect answer.")
-
-                if result["percentage"] >= 80:
-                    st.success("High Performance: Try advanced learning material.")
-                elif result["percentage"] >= 50:
-                    st.info("Medium Performance: Revise this concept and practise again.")
-                else:
-                    st.warning("Low Performance: Revisit the lesson and practise basic questions.")
+                result=st.session_state.quiz_result
+                st.markdown('<div class="section-label">Your result</div>',unsafe_allow_html=True)
+                r1,r2,r3=st.columns(3);r1.metric("Correct answers",f"{result['correct']} / {result['total']}");r2.metric("Final score",f"{result['percentage']}%");r3.metric("Performance","High" if result['percentage']>=80 else "Medium" if result['percentage']>=50 else "Needs revision")
+                if result['percentage']>=80: st.success("High Performance: Try advanced learning material.")
+                elif result['percentage']>=50: st.info("Medium Performance: Revise this concept and practise again.")
+                else: st.warning("Keep practising: revisit the lesson and review the concepts.")
+                with st.expander("Review your answers",expanded=True):
+                    for i,q in enumerate(questions):
+                        st.markdown(f"**Question {i+1}:** {q['question']}")
+                        st.write(f"Your answer: {result['answers'][i]} · Correct answer: {q['answer']}")
+                        st.success("Correct") if result['answers'][i]==q['answer'] else st.error("Incorrect")
 
 # -------------------- Analytics --------------------
 elif page == "Analytics":
-    st.title("📊 Learning Analytics")
-    st.caption("History is loaded from the GitHub repository, not temporary app storage.")
-
+    page_header("LEARNING INSIGHTS","Learning Analytics","Track quiz attempts, review scores, and understand topic-wise performance.")
     try:
-        history_records, _ = load_history()
-        if not history_records:
-            st.info("Your quiz history will appear here after your first saved attempt.")
+        records,_=load_history()
+        if not records: empty_state("No analytics to display yet","Complete and save your first quiz. Your learning history will appear here.")
         else:
-            history = pd.DataFrame(history_records)
+            history=pd.DataFrame(records)
             if "completed_at_utc" in history.columns:
-                history["completed_at_utc"] = pd.to_datetime(
-                    history["completed_at_utc"], errors="coerce", utc=True
-                )
-                history = history.sort_values("completed_at_utc", ascending=False)
-
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Total Quiz Attempts", len(history))
-            col2.metric("Average Score", f"{history['percentage'].mean():.1f}%")
-            col3.metric("Total Questions Answered", int(history["total"].sum()))
-
-            st.subheader("Quiz History")
-            display_columns = [
-                column for column in [
-                    "completed_at_utc", "video_title", "topic",
-                    "score", "total", "percentage"
-                ] if column in history.columns
-            ]
-            st.dataframe(history[display_columns], use_container_width=True)
-
-            st.subheader("Score History")
-            chart_data = history.copy()
-            if "completed_at_utc" in chart_data.columns:
-                chart_data = chart_data.sort_values("completed_at_utc")
-                chart_data = chart_data.set_index("completed_at_utc")
-            st.line_chart(chart_data["percentage"])
-
+                history["completed_at_utc"]=pd.to_datetime(history["completed_at_utc"],errors="coerce",utc=True)
+                history=history.sort_values("completed_at_utc",ascending=False)
+            c1,c2,c3,c4=st.columns(4)
+            c1.metric("Quiz attempts",len(history));c2.metric("Average score",f"{history['percentage'].mean():.1f}%");c3.metric("Best score",f"{history['percentage'].max():.0f}%");c4.metric("Questions answered",int(history["total"].sum()))
+            st.markdown('<div class="section-label">Performance over time</div><div class="section-hint">Your saved quiz scores in chronological order.</div>',unsafe_allow_html=True)
+            chart=history.copy()
+            if "completed_at_utc" in chart.columns: chart=chart.sort_values("completed_at_utc").set_index("completed_at_utc")
+            st.line_chart(chart["percentage"],use_container_width=True)
             if "topic" in history.columns:
-                st.subheader("Performance by Topic")
-                topic_average = history.groupby("topic")["percentage"].mean()
-                st.bar_chart(topic_average)
-
-            with st.expander("View complete saved attempt records"):
-                st.json(history_records)
-
+                st.markdown('<div class="section-label">Topic-wise performance</div>',unsafe_allow_html=True)
+                topic_avg=history.groupby("topic")["percentage"].mean().sort_values(ascending=False)
+                st.bar_chart(topic_avg,use_container_width=True)
+            st.markdown('<div class="section-label">Recent quiz history</div>',unsafe_allow_html=True)
+            cols=[c for c in ["completed_at_utc","video_title","topic","score","total","percentage"] if c in history.columns]
+            st.dataframe(history[cols],use_container_width=True,hide_index=True)
+            with st.expander("View complete saved attempt records"): st.json(records)
     except Exception as exc:
         st.error(f"Unable to load permanent analytics from GitHub: {exc}")
-        st.info(
-            "Check that GITHUB_TOKEN is configured in Streamlit Secrets and "
-            "has Contents read/write permission for this repository."
-        )
+        st.info("Check that GITHUB_TOKEN is configured in Streamlit Secrets and has Contents read/write permission for this repository.")
 
 # -------------------- About --------------------
 elif page == "About":
-    st.title("About LearnTube AI")
-    st.write("""
-    LearnTube AI is an adaptive educational video learning platform.
-
-    Its main objectives are:
-    - Process educational video transcripts.
-    - Identify important learning concepts.
-    - Support concept-based quizzes.
-    - Generate up to five transcript-based questions per quiz.
-    - Evaluate student performance.
-    - Track learning progress using persistent GitHub-backed analytics.
-    """)
-    st.write("Developed as an academic Machine Learning project.")
+    page_header("ABOUT THE PROJECT","Learning should be active, not passive.","LearnTube AI supports structured learning from educational video transcripts.")
+    st.markdown('<div class="hero"><div class="eyebrow">PROJECT OVERVIEW</div><h1 style="font-size:1.8rem">LearnTube AI</h1><p>An adaptive educational video learning platform that processes transcripts, identifies supported concepts, prepares concept-based quizzes, evaluates performance, and records learning progress.</p></div>',unsafe_allow_html=True)
+    st.markdown('<div class="section-label">How the platform works</div>',unsafe_allow_html=True)
+    a,b,c=st.columns(3)
+    for col,n,t,d in [(a,"01","Transcript processing","Add a YouTube video or paste its transcript. The text is cleaned and split into chunks."),(b,"02","Concept identification","The application checks the transcript for supported learning concepts."),(c,"03","Quiz and analytics","Generate topic-based questions, review your result, and track saved attempts.")]:
+        with col: st.markdown(f'<div class="step-card"><div class="step-no">STAGE {n}</div><div class="step-name">{t}</div><div class="step-copy">{d}</div></div>',unsafe_allow_html=True)
+    st.markdown('<div class="section-label">Core features</div>',unsafe_allow_html=True)
+    f1,f2=st.columns(2)
+    with f1: st.markdown('<div class="panel"><div class="panel-title">Video-based learning</div><div class="panel-subtitle">Transcript input, cleaning, chunking, and supported concept identification.</div></div><div class="panel"><div class="panel-title">Concept-based quizzes</div><div class="panel-subtitle">Up to five transcript-context questions for a selected concept.</div></div>',unsafe_allow_html=True)
+    with f2: st.markdown('<div class="panel"><div class="panel-title">Performance feedback</div><div class="panel-subtitle">Score calculation, answer review, and performance-level feedback.</div></div><div class="panel"><div class="panel-title">Learning analytics</div><div class="panel-subtitle">Quiz history and score analytics stored using GitHub-backed JSON.</div></div>',unsafe_allow_html=True)
+    st.markdown('<div class="section-label">Technology stack</div>',unsafe_allow_html=True)
+    st.markdown('<span class="concept-chip">Python</span><span class="concept-chip">Streamlit</span><span class="concept-chip">Pandas</span><span class="concept-chip">YouTube Transcript API</span><span class="concept-chip">Requests</span><span class="concept-chip">GitHub API</span>',unsafe_allow_html=True)
+    st.caption("Developed as an academic Machine Learning project.")
