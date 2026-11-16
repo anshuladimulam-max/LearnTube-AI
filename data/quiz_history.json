@@ -190,5 +190,77 @@
         "is_correct": true
       }
     ]
+  },
+  {
+    "attempt_id": "af25f483-46b0-4d12-9fe4-e00999c3c7bb",
+    "completed_at_utc": "2026-11-16T12:17:09.700848+00:00",
+    "video_title": "YouTube video JxgmHe2NyeY",
+    "video_url": "https://www.youtube.com/watch?v=JxgmHe2NyeY",
+    "topic": "Artificial Intelligence",
+    "score": 2,
+    "total": 5,
+    "percentage": 40,
+    "questions": [
+      {
+        "question": "Complete the statement from the transcript:\n\nyou really want to understand the difference between AI versus ml versus DL versus data science we will go in this specific format so just imagine the entire universe so this entire universe I will probably call it as an AI now specifically when I say AI this basically means AI ________ whatever role",
+        "options": [
+          "Neural Networks",
+          "Data Science",
+          "Machine Learning",
+          "Artificial Intelligence"
+        ],
+        "correct_answer": "Artificial Intelligence",
+        "user_answer": "Neural Networks",
+        "is_correct": false
+      },
+      {
+        "question": "Complete the statement from the transcript:\n\nimagine the entire universe so this entire universe I will probably call it as an AI now specifically when I say AI this basically means AI ________ whatever role you are in you are as a machine learning developer you working as a deep learning developer Vision developer or a data scientist or an",
+        "options": [
+          "Deep Learning",
+          "Artificial Intelligence",
+          "Machine Learning",
+          "Supervised Learning"
+        ],
+        "correct_answer": "Artificial Intelligence",
+        "user_answer": "Artificial Intelligence",
+        "is_correct": true
+      },
+      {
+        "question": "Complete the statement from the transcript:\n\nAI ________ whatever role you are in you are as a machine learning developer you working as a deep learning developer Vision developer or a data scientist or an AI engineer at the end of the day you are actually creating AI application so if I really want to Define what is this artificial",
+        "options": [
+          "Artificial Intelligence",
+          "Neural Networks",
+          "Natural Language Processing",
+          "Linear Regression"
+        ],
+        "correct_answer": "Artificial Intelligence",
+        "user_answer": "Neural Networks",
+        "is_correct": false
+      },
+      {
+        "question": "Complete the statement from the transcript:\n\na data scientist or an AI engineer at the end of the day you are actually creating AI application so if I really want to Define what is this ________ you can just say that it is a process wherein we create some kind of applications in which it will be able to do",
+        "options": [
+          "Classification",
+          "Machine Learning",
+          "Artificial Intelligence",
+          "Natural Language Processing"
+        ],
+        "correct_answer": "Artificial Intelligence",
+        "user_answer": "Artificial Intelligence",
+        "is_correct": true
+      },
+      {
+        "question": "Complete the statement from the transcript:\n\nDefine what is this ________ you can just say that it is a process wherein we create some kind of applications in which it will be able to do its task without any human intervention so that basically means a person need not monitor this AI application automatically it'll be able to make decisions",
+        "options": [
+          "Data Science",
+          "Artificial Intelligence",
+          "Computer Vision",
+          "Deep Learning"
+        ],
+        "correct_answer": "Artificial Intelligence",
+        "user_answer": "Deep Learning",
+        "is_correct": false
+      }
+    ]
   }
 ]
