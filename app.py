@@ -135,81 +135,116 @@ lesson lessons topic topics today really want going go went come came say says s
 know think thought see seen look looking learn learning learned understand
 understanding show shows shown explain explained explanation""".split())
 
+# Frequent verbs and generic narration words are poor topic labels.
+_VERB_NOISE = set("""
+protects protect changed change affects affect influence influences began begin
+increased increase grew grow uses use produces produce produced makes made powered
+power explains explain describe describes occurs occur absorbs absorb depends depend
+attracts attract monitor monitors verifies verify helps help states state discusses
+discuss includes include called call known know means mean shows show tells tell
+works work becomes become provides provide contains contain requires require
+looks look gets get gives give uses using
+""".split())
+
 
 def identify_concepts(text, limit=18):
-    """Extract recurring topic terms and phrases from a transcript.
+    """Extract recurring words and short phrases from varied subject domains.
 
-    This is language-agnostic only to the extent of basic Latin-word tokenizing;
-    it is not semantic understanding. It can surface topics from many domains
-    without relying on a fixed subject list.
+    This is statistical keyphrase extraction, not semantic AI. A fallback to
+    frequent content words prevents long, valid transcripts returning zero
+    topics merely because the same two-word phrase is not repeated.
     """
     if not text or not text.strip():
         return []
 
     sentences = re.split(r"(?<=[.!?])\s+|[\r\n]+", text)
-    phrase_counts = {}
-    display_forms = {}
-    word_counts = {}
-    word_display = {}
+    phrase_counts, phrase_display = {}, {}
+    word_counts, word_display = {}, {}
 
     for sentence in sentences:
-        tokens = re.findall(r"[A-Za-z][A-Za-z0-9+#.'-]*", sentence)
-        normalized = [t.strip(".'-").lower() for t in tokens]
-        originals = [t.strip(".'-") for t in tokens]
+        tokens = re.findall(r"[A-Za-z][A-Za-z0-9+#'-]*", sentence)
+        normalized = [t.strip("'-").lower() for t in tokens]
+        originals = [t.strip("'-") for t in tokens]
         for word, original in zip(normalized, originals):
-            if word and word not in _STOPWORDS and len(word) >= 4:
+            if len(word) >= 3 and word not in _STOPWORDS and word not in _VERB_NOISE and not word.isdigit():
                 word_counts[word] = word_counts.get(word, 0) + 1
                 word_display.setdefault(word, original)
         for n in (2, 3):
             for i in range(len(normalized) - n + 1):
                 gram = normalized[i:i+n]
-                if any(not w or w in _STOPWORDS for w in gram):
-                    continue
-                if any(len(w) < 3 for w in gram):
+                if any(w in _STOPWORDS or len(w) < 3 for w in gram):
                     continue
                 key = " ".join(gram)
                 phrase_counts[key] = phrase_counts.get(key, 0) + 1
-                display_forms.setdefault(key, " ".join(originals[i:i+n]))
+                phrase_display.setdefault(key, " ".join(originals[i:i+n]))
 
     ranked = []
     for phrase, count in phrase_counts.items():
         if count >= 2:
-            words = phrase.split()
-            score = count * (1.0 + 0.7 * (len(words) - 1))
-            ranked.append((score, count, phrase, display_forms[phrase]))
+            score = count * (1.0 + 0.65 * (len(phrase.split()) - 1))
+            ranked.append((score, count, phrase, phrase_display[phrase]))
 
-    # If the transcript has few repeated phrases, use repeated content words
-    # rather than returning an empty concept list for a valid long transcript.
+    # Include frequent single terms as a fallback and as useful distractors.
     for word, count in word_counts.items():
-        if count >= 3:
-            ranked.append((count * 0.85, count, word, word_display[word]))
+        if count >= 2:
+            ranked.append((count * 0.9, count, word, word_display[word]))
 
-    ranked.sort(key=lambda item: (-item[0], -item[1], item[2]))
+    ranked.sort(key=lambda x: (-x[0], -x[1], x[2]))
     results, seen = [], set()
-    for _, _, phrase, label in ranked:
-        normalized_phrase = phrase.casefold()
-        if normalized_phrase in seen:
+    for _, _, key, label in ranked:
+        norm = key.casefold()
+        if norm in seen:
             continue
-        # Avoid duplicate nested labels such as "cell" beside "cell division".
-        if len(phrase.split()) == 1 and any(phrase in x.split() for x in seen):
+        # Suppress a single word if it is already contained in a phrase.
+        if len(key.split()) == 1 and any(key in existing.split() for existing in seen):
             continue
         results.append(label)
-        seen.add(normalized_phrase)
+        seen.add(norm)
         if len(results) >= limit:
             break
 
-    # Keep familiar ML terms when present, but never restrict other subjects.
+    # Fill remaining slots with source-specific content words, including
+    # single-occurrence nouns. This helps short videos with varied vocabulary.
+    for word, count in sorted(word_counts.items(), key=lambda x: (-x[1], x[0])):
+        if word in seen or word in _STOPWORDS or word in _VERB_NOISE:
+            continue
+        if any(word in existing.split() for existing in seen):
+            continue
+        results.append(word_display[word])
+        seen.add(word)
+        if len(results) >= min(limit, 12):
+            break
+
+    # Keep canonical ML terms when actually present in the transcript.
     for known in CONCEPTS:
         if _concept_regex(known).search(text) and known.casefold() not in seen:
             results.append(known)
             seen.add(known.casefold())
             if len(results) >= limit:
                 break
-    return results
-
+    return results[:limit]
 
 def clean_transcript(text):
-    return re.sub(r"\s+", " ", text).strip()
+    """Normalize pasted, TXT, SRT, and VTT transcript text."""
+    if not text:
+        return ""
+    text = str(text).replace("\ufeff", " ")
+    cleaned_lines = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.upper() == "WEBVTT" or line.startswith("NOTE "):
+            continue
+        if re.fullmatch(r"\d+", line):
+            continue
+        # SRT/VTT timestamps, with or without cue settings.
+        if re.match(r"^(?:\d{1,2}:)?\d{2}:\d{2}[.,]\d{3}\s+-->\s+", line):
+            continue
+        line = re.sub(r"<[^>]+>", " ", line)
+        line = re.sub(r"\[[^\]]{1,40}\]", " ", line)
+        cleaned_lines.append(line)
+    return re.sub(r"\s+", " ", " ".join(cleaned_lines)).strip()
 
 
 def split_transcript(text, size=100):
@@ -218,36 +253,54 @@ def split_transcript(text, size=100):
 
 
 def extract_transcript(video_id):
-    """
-    Try the current transcript API, then enumerate available caption tracks.
-    YouTube may still block cloud-hosted requests; that cannot be bypassed
-    reliably by application code.
+    """Try both current and legacy youtube-transcript-api interfaces.
+
+    YouTube may block requests from cloud-hosted IPs. If it does, the app
+    reports that limitation and supports pasted or uploaded transcript files.
     """
     from youtube_transcript_api import YouTubeTranscriptApi
 
-    api = YouTubeTranscriptApi()
     errors = []
 
     def snippets_to_text(snippets):
         parts = []
         for item in snippets:
-            value = item.text if hasattr(item, "text") else item.get("text", "")
+            if hasattr(item, "text"):
+                value = item.text
+            elif isinstance(item, dict):
+                value = item.get("text", "")
+            else:
+                value = ""
             if value:
                 parts.append(str(value))
         return clean_transcript(" ".join(parts))
 
-    # Preferred current API.
+    # New API (youtube-transcript-api 1.x).
     try:
+        api = YouTubeTranscriptApi()
         fetched = api.fetch(video_id, languages=["en", "en-US", "en-GB"])
         text = snippets_to_text(fetched)
         if text:
             return text
-        errors.append("YouTube returned an empty English transcript.")
+        errors.append("The direct English caption track was empty.")
     except Exception as exc:
-        errors.append(f"Direct caption fetch: {type(exc).__name__}: {exc}")
+        errors.append(f"Current API fetch: {type(exc).__name__}: {str(exc)[:240]}")
 
-    # Fallback: inspect available caption tracks and use a translatable track.
+    # Legacy API (youtube-transcript-api 0.x).
     try:
+        legacy_fetch = getattr(YouTubeTranscriptApi, "get_transcript", None)
+        if callable(legacy_fetch):
+            fetched = legacy_fetch(video_id, languages=["en", "en-US", "en-GB"])
+            text = snippets_to_text(fetched)
+            if text:
+                return text
+            errors.append("The legacy English caption track was empty.")
+    except Exception as exc:
+        errors.append(f"Legacy API fetch: {type(exc).__name__}: {str(exc)[:240]}")
+
+    # New API track listing and translation fallback.
+    try:
+        api = YouTubeTranscriptApi()
         tracks = api.list(video_id)
         chosen = None
         try:
@@ -256,7 +309,6 @@ def extract_transcript(video_id):
             available = list(tracks)
             if available:
                 chosen = available[0]
-
         if chosen is not None:
             language_code = str(getattr(chosen, "language_code", "")).lower()
             if not language_code.startswith("en") and getattr(chosen, "is_translatable", False):
@@ -268,12 +320,31 @@ def extract_transcript(video_id):
                 return text
             errors.append("The available caption track was empty.")
         else:
-            errors.append("No caption tracks are available for this video.")
+            errors.append("No caption tracks were listed for this video.")
     except Exception as exc:
-        errors.append(f"Caption-track fallback: {type(exc).__name__}: {exc}")
+        errors.append(f"Current API track listing: {type(exc).__name__}: {str(exc)[:240]}")
 
-    raise RuntimeError(" || ".join(errors) or "No transcript could be retrieved.")
+    # Legacy track-listing fallback.
+    try:
+        legacy_list = getattr(YouTubeTranscriptApi, "list_transcripts", None)
+        if callable(legacy_list):
+            tracks = legacy_list(video_id)
+            try:
+                chosen = tracks.find_transcript(["en", "en-US", "en-GB"])
+            except Exception:
+                chosen = next(iter(tracks), None)
+            if chosen is not None:
+                if not str(getattr(chosen, "language_code", "")).lower().startswith("en") and getattr(chosen, "is_translatable", False):
+                    fetched = chosen.translate("en").fetch()
+                else:
+                    fetched = chosen.fetch()
+                text = snippets_to_text(fetched)
+                if text:
+                    return text
+    except Exception as exc:
+        errors.append(f"Legacy track listing: {type(exc).__name__}: {str(exc)[:240]}")
 
+    raise RuntimeError("\n".join(errors) or "No transcript could be retrieved.")
 
 def _concept_regex(concept):
     # Allow normal spaces or hyphens between words, with word boundaries.
@@ -281,77 +352,80 @@ def _concept_regex(concept):
     return re.compile(rf"(?<![A-Za-z0-9]){phrase}(?![A-Za-z0-9])", re.IGNORECASE)
 
 
-def _candidate_contexts(transcript, selected, max_words=55):
+def _candidate_contexts(transcript, selected, max_words=65):
+    """Find distinct transcript sentences/windows containing the chosen topic."""
     pattern = _concept_regex(selected)
     raw_sentences = re.split(r"(?<=[.!?])\s+|[\r\n]+", transcript)
-    candidates = []
+    candidates, seen = [], set()
+
+    def add_context(value):
+        value = re.sub(r"\s+", " ", value).strip(" \t-,:;")
+        words = value.split()
+        if not (5 <= len(words) <= max_words) or not pattern.search(value):
+            return
+        norm = re.sub(r"\W+", " ", value.casefold()).strip()
+        if norm not in seen:
+            seen.add(norm)
+            candidates.append(value)
 
     for sentence in raw_sentences:
-        sentence = re.sub(r"\s+", " ", sentence).strip(" \t-")
-        if not pattern.search(sentence):
-            continue
-        words = sentence.split()
-        if 6 <= len(words) <= max_words:
-            candidates.append(sentence)
-        elif len(words) > max_words:
-            for left in range(0, len(words), 20):
-                window = " ".join(words[left:left + max_words])
-                if 6 <= len(window.split()) <= max_words and pattern.search(window):
-                    candidates.append(window)
+        sentence = sentence.strip()
+        if pattern.search(sentence):
+            if len(sentence.split()) <= max_words:
+                add_context(sentence)
+            else:
+                words = sentence.split()
+                # Sliding windows; keep only windows containing the topic.
+                for left in range(0, len(words), 18):
+                    add_context(" ".join(words[left:left + max_words]))
 
-    # Captions often have no punctuation. Search overlapping windows.
+    # Captions frequently omit punctuation. Search overlapping windows.
     if len(candidates) < QUIZ_QUESTION_COUNT:
         words = transcript.split()
-        for left in range(0, max(1, len(words) - 5), 15):
-            window = " ".join(words[left:left + 45])
-            if 6 <= len(window.split()) <= 45 and pattern.search(window):
-                candidates.append(window)
-
-    unique, seen = [], set()
-    for context in candidates:
-        masked = pattern.sub(" CONCEPT ", context, count=1)
-        normalized = re.sub(r"[^a-z0-9]+", " ", masked.casefold()).strip()
-        if normalized and normalized not in seen:
-            seen.add(normalized)
-            unique.append(context)
-    return unique
+        for left in range(0, max(1, len(words) - 6), 12):
+            add_context(" ".join(words[left:left + max_words]))
+            if len(candidates) >= 30:
+                break
+    return candidates
 
 
 def _transcript_distractors(transcript, selected, detected, needed=3):
-    """Build distinct distractors from this transcript, not unrelated ML terms."""
+    """Collect distinct alternative terms that genuinely occur in the source."""
     selected_key = selected.casefold()
-    selected_words = set(re.findall(r"[a-z]+", selected_key))
-    pool = [x for x in detected if x.casefold() != selected_key]
-    seen = {x.casefold() for x in pool}
+    pool, seen = [], {selected_key}
 
-    # Add content words from the same transcript if fewer than three other
-    # recurring phrases were found. Prefer repeated words, then use distinct
-    # source words as a last resort rather than inserting unrelated subjects.
-    words = re.findall(r"[A-Za-z][A-Za-z0-9+#'-]{3,}", transcript)
-    counts = {}
-    display = {}
+    def add(value):
+        value = re.sub(r"\s+", " ", str(value)).strip(" .,:;!?-")
+        key = value.casefold()
+        if value and key not in seen and len(value) >= 3:
+            seen.add(key)
+            pool.append(value)
+
+    for concept in detected:
+        add(concept)
+
+    # Add frequent source terms/phrases when the detected topic list is small.
+    words = re.findall(r"[A-Za-z][A-Za-z0-9+#'-]{2,}", transcript)
+    counts, display = {}, {}
     for word in words:
-        key = word.lower()
-        if key in _STOPWORDS or key in selected_words:
+        key = word.strip("'-").lower()
+        if key in _STOPWORDS or key == selected_key or len(key) < 3:
             continue
         counts[key] = counts.get(key, 0) + 1
-        display.setdefault(key, word)
-    ordered = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
-    for minimum_count in (2, 1):
-        for key, count in ordered:
-            if count >= minimum_count and key not in seen:
-                pool.append(display[key])
-                seen.add(key)
-            if len(pool) >= needed:
-                return pool
+        display.setdefault(key, word.strip("'-"))
+    for key, _ in sorted(counts.items(), key=lambda x: (-x[1], x[0])):
+        add(display[key])
+        if len(pool) >= needed:
+            break
     return pool
 
 
 def generate_questions(transcript, selected, count=QUIZ_QUESTION_COUNT):
-    """Create up to five transcript-grounded sentence-completion MCQs.
+    """Generate up to five transcript-grounded cloze MCQs for any subject.
 
-    This is transparent, template-based generation. It does not claim to
-    understand the transcript like a generative language model.
+    Every correct answer is a phrase present in the selected source context.
+    Distractors are other terms extracted from the same transcript. This is a
+    transparent template-based generator, not an LLM or semantic fact checker.
     """
     if not transcript or not selected or count < 1:
         return []
@@ -360,45 +434,42 @@ def generate_questions(transcript, selected, count=QUIZ_QUESTION_COUNT):
     if not contexts:
         return []
 
-    detected = identify_concepts(transcript, limit=40)
-    distractor_pool = _transcript_distractors(transcript, selected, detected, needed=3)
-    distractor_pool = [x for x in distractor_pool if x.casefold() != selected.casefold()]
-    # There must be three distinct transcript-derived alternatives. If the
-    # source does not support them, do not invent misleading answer choices.
-    if len({x.casefold() for x in distractor_pool}) < 3:
+    detected = identify_concepts(transcript, limit=60)
+    distractors = _transcript_distractors(transcript, selected, detected, needed=3)
+    if len(distractors) < 3:
         return []
 
-    seed_text = f"{selected.casefold()}|{transcript[:5000]}"
-    rng = random.Random(int(hashlib.sha256(seed_text.encode("utf-8")).hexdigest()[:12], 16))
-    questions, used_contexts = [], set()
+    seed_text = f"{selected.casefold()}|{transcript[:10000]}"
+    seed = int(hashlib.sha256(seed_text.encode("utf-8")).hexdigest()[:12], 16)
+    rng = random.Random(seed)
+    questions, used = [], set()
+    pattern = _concept_regex(selected)
 
     for context in contexts:
-        match = _concept_regex(selected).search(context)
+        match = pattern.search(context)
         if not match:
             continue
-        question_text = context[:match.start()] + "□□□□" + context[match.end():]
-        normalized = re.sub(r"\W+", " ", question_text.casefold()).strip()
-        if normalized in used_contexts:
+        # Preserve source sentence while masking only the selected term.
+        masked = context[:match.start()] + "________" + context[match.end():]
+        norm = re.sub(r"\W+", " ", masked.casefold()).strip()
+        if norm in used:
             continue
-        used_contexts.add(normalized)
+        used.add(norm)
 
-        # Prefer alternatives from the same transcript; avoid duplicates.
-        available = [x for x in distractor_pool if x.casefold() != selected.casefold()]
+        available = [x for x in distractors if x.casefold() != selected.casefold()]
         if len(available) < 3:
             break
-        choices = rng.sample(available, 3) + [selected]
-        rng.shuffle(choices)
+        options = rng.sample(available, 3) + [selected]
+        rng.shuffle(options)
         questions.append({
-            "question": "Complete the statement from the transcript:\n\n" + question_text,
-            "options": choices,
+            "question": "According to the transcript, complete the statement:\n\n" + masked,
+            "options": options,
             "answer": selected,
             "source_context": context,
         })
-        if len(questions) >= max(1, min(count, QUIZ_QUESTION_COUNT)):
+        if len(questions) >= min(count, QUIZ_QUESTION_COUNT):
             break
-
     return questions
-
 
 def youtube_video_id(url):
     """Extract IDs from watch, youtu.be, shorts, embed, and live URLs."""
@@ -625,7 +696,13 @@ elif page == "Video Learning":
         st.markdown('<div class="panel-title">01 · Add your learning material</div><div class="panel-subtitle">Use a YouTube URL with available captions, or paste transcript text directly.</div>', unsafe_allow_html=True)
         url = st.text_input("YouTube video URL", value=st.session_state.video_url, placeholder="https://www.youtube.com/watch?v=...")
         st.markdown('<div style="text-align:center;color:#687572;font-size:.8rem;padding:5px">— OR PASTE TRANSCRIPT —</div>', unsafe_allow_html=True)
-        transcript_input = st.text_area("Transcript text", height=230, placeholder="Paste the video transcript here...")
+        transcript_file = st.file_uploader(
+            "Or upload a transcript file (.txt, .srt, .vtt)",
+            type=["txt", "srt", "vtt"],
+            help="Upload a transcript downloaded or copied from your video source.",
+            key="transcript_upload",
+        )
+        transcript_input = st.text_area("Or paste transcript text", height=190, placeholder="Paste the video transcript here...")
         process = st.button("Process learning material", use_container_width=True)
 
     with right:
@@ -639,16 +716,24 @@ elif page == "Video Learning":
         <div class="step-no">03</div><b>Identify concepts</b>
         <p style="color:#687572;font-size:.85rem">Find supported learning topics.</p></div>''', unsafe_allow_html=True)
         st.markdown('''<div class="panel"><div class="panel-title">Supported input</div>
-        <div class="panel-subtitle">YouTube links and manually pasted transcript text.</div>
+        <div class="panel-subtitle">YouTube captions, pasted text, or uploaded TXT/SRT/VTT files.</div>
         <span class="concept-chip">YouTube captions</span>
-        <span class="concept-chip">Transcript text</span>
+        <span class="concept-chip">TXT / SRT / VTT</span>
         <span class="concept-chip">Concept analysis</span></div>''', unsafe_allow_html=True)
 
     if process:
         text = transcript_input.strip()
         source_is_youtube = False
+        source_is_file = False
 
-        if not text and url.strip():
+        if not text and transcript_file is not None:
+            try:
+                text = transcript_file.getvalue().decode("utf-8-sig", errors="replace")
+                source_is_file = True
+            except Exception as exc:
+                st.error(f"Could not read the uploaded transcript file: {exc}")
+
+        if not text and not source_is_file and url.strip():
             video_id = youtube_video_id(url)
             if not video_id:
                 st.error("This does not look like a valid YouTube video URL. Use a watch, youtu.be, shorts, embed, or live link.")
@@ -658,10 +743,10 @@ elif page == "Video Learning":
                     with st.spinner("Checking available YouTube captions..."):
                         text = extract_transcript(video_id)
                 except Exception as exc:
-                    st.error("Automatic caption retrieval failed. This is usually caused by unavailable captions or YouTube blocking requests from the Streamlit Cloud server.")
+                    st.error("YouTube caption retrieval was blocked or no captions were available. Your URL was recognised, but the server could not obtain its transcript.")
                     with st.expander("Technical details"):
                         st.code(str(exc)[:1800], language=None)
-                    st.info("Reliable fallback: open the video on YouTube, choose “Show transcript”, copy the transcript, paste it above, and process it. A valid video link alone cannot guarantee that YouTube permits server-side caption access.")
+                    st.info("Reliable alternatives: open the video on YouTube and choose “Show transcript”, then paste the text above or save it as TXT/SRT/VTT and upload it. YouTube may block automatic transcript requests from cloud servers even for valid public videos.")
         elif not text and not url.strip():
             st.warning("Enter a YouTube URL or paste transcript text to continue.")
 
@@ -675,7 +760,12 @@ elif page == "Video Learning":
                 st.session_state.concepts = identify_concepts(cleaned)
                 st.session_state.video_url = url.strip() if source_is_youtube else ""
                 video_id = youtube_video_id(url) if source_is_youtube else None
-                st.session_state.video_title = f"YouTube video {video_id}" if video_id else "Pasted transcript"
+                if video_id:
+                    st.session_state.video_title = f"YouTube video {video_id}"
+                elif source_is_file and transcript_file is not None:
+                    st.session_state.video_title = transcript_file.name
+                else:
+                    st.session_state.video_title = "Pasted transcript"
                 st.session_state.session_started = datetime.now(timezone.utc).isoformat()
                 st.session_state.questions = []
                 st.session_state.quiz_result = None
@@ -694,7 +784,7 @@ elif page == "Video Learning":
         if st.session_state.concepts:
             st.markdown(''.join(f'<span class="concept-chip">{html.escape(c)}</span>' for c in st.session_state.concepts), unsafe_allow_html=True)
         else:
-            st.warning("No recurring topic phrases were detected. Try a longer transcript with more complete explanations, or paste the transcript again.")
+            st.warning("No clear topic terms were detected. Try uploading a cleaner transcript or one with more explanatory content. You can still process a transcript from any subject; the detector is based on recurring words and phrases, not a fixed subject list.")
         with st.expander("Read processed transcript"):
             st.write(st.session_state.transcript)
 
@@ -716,7 +806,7 @@ elif page == "Video Learning":
                         st.warning("Fewer than five distinct transcript contexts were available, so the quiz contains only the questions that could be supported.")
                 else:
                     st.warning("No suitable sentence was found for this concept. Choose another concept or paste a longer transcript with explanatory sentences.")
-            st.caption("Question method: transcript-based sentence completion using recurring topic phrases. Answer choices are drawn from other recurring terms in the same transcript. This is lightweight keyphrase extraction and template-based question generation, not an external AI/LLM.")
+            st.caption("Question method: transcript-based sentence completion. The correct term is taken from the selected transcript context; alternative terms are drawn from the same transcript. This is template-based question generation, not an external AI/LLM or a semantic fact-checker.")
     else:
         empty_state("Your workspace is ready", "Add a YouTube video or paste transcript text to begin.")
 
