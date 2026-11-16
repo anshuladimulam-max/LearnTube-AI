@@ -135,5 +135,71 @@
         "source_context": "regression cost function but there is one problem we cannot we cannot use we cannot use this cost function there is a reason for this because this equation that you're seeing 1/ 1 + e^ of minus Theta 1 * X this is a non-convex function now you"
       }
     ]
+  },
+  {
+    "set_id": "d94a49d4-1792-452f-9a56-8957dc1f7d74",
+    "set_number": 2,
+    "created_at_utc": "2026-11-16T14:08:26.534369+00:00",
+    "transcript_hash": "84c48fef57b33e4591f4847e2ec7de21081a6ead28d679bba72b4e6b7a586770",
+    "video_title": "Pasted transcript",
+    "video_url": "",
+    "question_count": 5,
+    "questions": [
+      {
+        "question": "Which concept is being explained in this passage?\n\nTennis yes or no okay whether the person is going to pay tennis or not yesterday or there after yesterday or whenever you want so if I have this these systems like Outlook temperature humidity and wind is the person going to play tennis or not this is",
+        "options": [
+          "particular point",
+          "definitely write",
+          "performing well",
+          "input features"
+        ],
+        "answer": "input features",
+        "source_context": "tennis yes or no okay whether the person is going to pay tennis or not yesterday or there after yesterday or whenever you want so if I have this input features like Outlook temperature humidity and wind is the person going to play tennis or not this is"
+      },
+      {
+        "question": "Which method or idea best matches the explanation below?\n\nConcept which is called as within this concept so when we try different K values let's say that for K is equal to 2 what will happen the first step we select a we try K values so let's say that we are considering K is",
+        "options": [
+          "weak learner weak learner",
+          "cluster sum of square",
+          "logistic regression cost function",
+          "house pricing data set"
+        ],
+        "answer": "cluster sum of square",
+        "source_context": "concept which is called as within cluster sum of square so when we try different K values let's say that for K is equal to 2 what will happen the first step we select a we try K values so let's say that we are considering K is"
+      },
+      {
+        "question": "What concept is associated with the role described here?\n\nBe one which is nothing but pass so this two condition I can this concept over here this is my center point so that any point that will probably come over here let's say that this point is coming over here right let's say new data point is",
+        "options": [
+          "definitely write",
+          "performing well",
+          "convergence algorithm",
+          "particular point"
+        ],
+        "answer": "definitely write",
+        "source_context": "be one which is nothing but pass so this two condition I can definitely write over here this is my center point so that any point that will probably come over here let's say that this point is coming over here right let's say new data point is"
+      },
+      {
+        "question": "Identify the concept that this explanation refers to.\n\nAmazing diagram which will help you understand more in this a k means clustering and Hier mean clustering now see this everybody now the right hand side of diagram that you see is based on DB this concept and the left hand side is basically your traditional clustering",
+        "options": [
+          "performing well",
+          "convergence algorithm",
+          "particular point",
+          "scan clustering"
+        ],
+        "answer": "scan clustering",
+        "source_context": "amazing diagram which will help you understand more in this a k means clustering and Hier mean clustering now see this everybody now the right hand side of diagram that you see is based on DB scan clustering and the left hand side is basically your traditional clustering"
+      },
+      {
+        "question": "Which term best represents the idea discussed in this passage?\n\nWrite this in a easy way okay so this will be this concept J and remember J will be 0 and 1 right because we need to find out for 0 Theta 0 and Theta 1 so this will be 1 by 2 m what is what",
+        "options": [
+          "derivative of derivative",
+          "derivative of theta",
+          "binary classification problem",
+          "linear regression now"
+        ],
+        "answer": "derivative of theta",
+        "source_context": "write this in a easy way okay so this will be derivative of theta J and remember J will be 0 and 1 right because we need to find out for 0 Theta 0 and Theta 1 so this will be 1 by 2 m what is what"
+      }
+    ]
   }
 ]
