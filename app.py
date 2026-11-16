@@ -10,39 +10,6 @@ from datetime import datetime, timezone
 
 st.set_page_config(page_title="LearnTube AI", page_icon="🎓", layout="wide")
 
-st.markdown("""<style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
-:root { --lt-ink:#172554; --lt-muted:#64748b; --lt-blue:#3157d5; --lt-purple:#7656d6; --lt-line:#e5eaf4; }
-html, body, [class*="css"] { font-family:'DM Sans', sans-serif; }
-.stApp { background:linear-gradient(180deg,#f7f9ff 0%,#ffffff 360px); color:#172033; }
-.block-container { max-width:1180px; padding-top:2.1rem; padding-bottom:3rem; }
-[data-testid="stSidebar"] { background:linear-gradient(180deg,#111d42 0%,#1d2d60 100%); border-right:0; }
-[data-testid="stSidebar"] * { color:#f8faff !important; }
-[data-testid="stSidebar"] [data-testid="stRadio"] label { padding:9px 12px; border-radius:10px; }
-[data-testid="stSidebar"] [data-testid="stRadio"] label:hover { background:#ffffff18; }
-[data-testid="stSidebar"] hr { border-color:#ffffff30; }
-[data-testid="stMetric"] { background:#fff; border:1px solid var(--lt-line); border-radius:16px; padding:18px 20px; box-shadow:0 5px 18px #1e3a8a0a; }
-[data-testid="stMetricLabel"] { color:#64748b; font-weight:600; }
-[data-testid="stMetricValue"] { color:var(--lt-ink); font-weight:800; }
-.stButton > button, .stFormSubmitButton > button { border:0; border-radius:11px; padding:.62rem 1.2rem; font-weight:700; color:white; background:linear-gradient(100deg,var(--lt-blue),var(--lt-purple)); box-shadow:0 5px 14px #3157d52b; transition:transform .15s ease, box-shadow .15s ease; }
-.stButton > button:hover, .stFormSubmitButton > button:hover { color:white; transform:translateY(-1px); box-shadow:0 8px 18px #3157d540; }
-input, textarea, [data-baseweb="select"] > div { border-radius:10px !important; }
-[data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea { border:1px solid #dce3f0; background:#fff; }
-[data-testid="stExpander"] { border:1px solid var(--lt-line); border-radius:12px; background:#fff; }
-[data-testid="stDataFrame"] { border:1px solid var(--lt-line); border-radius:12px; overflow:hidden; }
-hr { border-color:var(--lt-line); }
-h1 { color:#172554; font-weight:800; letter-spacing:-.04em; }
-h2, h3 { color:#20315d; font-weight:700; letter-spacing:-.02em; }
-.lt-hero { background:linear-gradient(115deg,#172554 0%,#344db1 58%,#7656d6 100%); border-radius:22px; padding:30px 32px; color:#fff; margin:0 0 24px 0; box-shadow:0 12px 32px #243b8b25; }
-.lt-hero h1 { color:#fff !important; font-size:2.15rem; margin:0 0 8px 0; }
-.lt-hero p { color:#e8edff; font-size:1.02rem; margin:0; max-width:760px; }
-.lt-eyebrow { color:#cbd5ff; font-size:.76rem; font-weight:800; letter-spacing:.13em; text-transform:uppercase; margin-bottom:10px; }
-.lt-section { background:#fff; border:1px solid var(--lt-line); border-radius:16px; padding:18px 20px; margin:10px 0; box-shadow:0 5px 18px #1e3a8a08; }
-.lt-pill { display:inline-block; background:#edf2ff; color:#3157d5; padding:5px 10px; border-radius:999px; font-size:.78rem; font-weight:700; margin:3px 5px 3px 0; }
-@media (max-width: 700px) { .block-container { padding:1rem 1rem 2rem; } .lt-hero { padding:23px; } .lt-hero h1 { font-size:1.65rem; } }
-</style>
-""", unsafe_allow_html=True)
-
 # -------------------- Persistent GitHub analytics --------------------
 # Configure these values in Streamlit Community Cloud > App settings > Secrets:
 # GITHUB_TOKEN = "github_pat_..."
@@ -167,9 +134,39 @@ def split_transcript(text, size=100):
 
 
 def extract_transcript(video_id):
+    """Fetch captions using both current and older youtube-transcript-api APIs."""
     from youtube_transcript_api import YouTubeTranscriptApi
-    transcript = YouTubeTranscriptApi().fetch(video_id)
-    return " ".join(item.text for item in transcript)
+
+    errors = []
+    # Current youtube-transcript-api versions use an instance and fetch().
+    try:
+        transcript = YouTubeTranscriptApi().fetch(
+            video_id, languages=["en", "en-US", "en-GB"]
+        )
+        text = " ".join(
+            item.text if hasattr(item, "text") else str(item.get("text", ""))
+            for item in transcript
+        ).strip()
+        if text:
+            return text
+        errors.append("The video returned an empty transcript.")
+    except Exception as exc:
+        errors.append(str(exc))
+
+    # Compatibility fallback for older library versions.
+    try:
+        legacy = YouTubeTranscriptApi.get_transcript(
+            video_id, languages=["en", "en-US", "en-GB"]
+        )
+        text = " ".join(item.get("text", "") for item in legacy).strip()
+        if text:
+            return text
+        errors.append("The video returned an empty transcript.")
+    except Exception as exc:
+        errors.append(str(exc))
+
+    detail = " | ".join(e for e in errors if e)
+    raise RuntimeError(detail or "No transcript was returned by YouTube.")
 
 
 def generate_questions(transcript, selected, count=QUIZ_QUESTION_COUNT):
@@ -226,10 +223,27 @@ def generate_questions(transcript, selected, count=QUIZ_QUESTION_COUNT):
 
 
 def youtube_video_id(url):
-    match = re.search(
-        r"(?:v=|youtu\.be/|shorts/|embed/)([A-Za-z0-9_-]{11})",
-        url or ""
-    )
+    """Extract IDs from watch, youtu.be, shorts, embed, and live URLs."""
+    from urllib.parse import urlparse, parse_qs
+    if not url:
+        return None
+    try:
+        parsed = urlparse(url.strip())
+        host = (parsed.netloc or "").lower().replace("www.", "")
+        if host in {"youtu.be", "m.youtube.com", "youtube.com", "music.youtube.com"}:
+            if host == "youtu.be":
+                candidate = parsed.path.strip("/").split("/")[0]
+            else:
+                query_id = parse_qs(parsed.query).get("v", [None])[0]
+                path_parts = [part for part in parsed.path.split("/") if part]
+                candidate = query_id
+                if not candidate and len(path_parts) >= 2 and path_parts[0] in {"shorts", "embed", "live", "v"}:
+                    candidate = path_parts[1]
+            if candidate and re.fullmatch(r"[A-Za-z0-9_-]{11}", candidate):
+                return candidate
+    except Exception:
+        pass
+    match = re.search(r"(?:v=|youtu\.be/|shorts/|embed/|live/)([A-Za-z0-9_-]{11})", url)
     return match.group(1) if match else None
 
 
@@ -255,39 +269,65 @@ def empty_state(title, message):
     st.markdown(f'''<div class="empty-state"><div class="empty-icon">✦</div>
     <div class="empty-title">{title}</div><div class="empty-copy">{message}</div></div>''', unsafe_allow_html=True)
 
-st.markdown('''<style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
-:root{--ink:#172554;--muted:#64748b;--blue:#3657d6;--purple:#7957d5;--line:#e7ebf3;}
-html,body,[class*="css"]{font-family:'DM Sans',sans-serif}
-.stApp{background:#f6f8fc;color:#172033}
-.block-container{max-width:1240px;padding-top:2rem;padding-bottom:3rem}
-[data-testid="stHeader"]{background:rgba(246,248,252,.88)}
-[data-testid="stSidebar"]{background:#111d3d;border-right:1px solid #25345c}
-[data-testid="stSidebar"] *{color:#f8faff}
-[data-testid="stSidebar"] [data-testid="stRadio"] label{padding:11px 13px;border-radius:11px;font-weight:600}
-[data-testid="stSidebar"] [data-testid="stRadio"] label:hover{background:#ffffff16}
-[data-testid="stSidebar"] hr{border-color:#ffffff24}
-[data-testid="stMetric"]{background:#fff;border:1px solid var(--line);border-radius:15px;padding:17px 19px;box-shadow:0 5px 18px #17255408}
-[data-testid="stMetricLabel"]{color:#64748b;font-weight:600}
-[data-testid="stMetricValue"]{color:var(--ink);font-weight:800}
-.stButton>button,.stFormSubmitButton>button{border:0;border-radius:10px;padding:.62rem 1.15rem;font-weight:700;color:#fff;background:linear-gradient(100deg,var(--blue),var(--purple));box-shadow:0 5px 13px #3657d626}
-.stButton>button:hover,.stFormSubmitButton>button:hover{color:white;border:0;transform:translateY(-1px)}
-[data-testid="stTextInput"] input,[data-testid="stTextArea"] textarea,[data-baseweb="select"]>div{border:1px solid #dce3ef;border-radius:10px;background:#fff}
-[data-testid="stExpander"], [data-testid="stDataFrame"]{border:1px solid var(--line);border-radius:12px;background:#fff}
-hr{border-color:var(--line)}
-h1,h2,h3{color:var(--ink);letter-spacing:-.035em}
-.page-head{margin:0 0 22px}.kicker{color:#5369c8;font-size:.72rem;font-weight:800;letter-spacing:.15em;text-transform:uppercase;margin-bottom:7px}
-.page-head h1{font-size:2.05rem;font-weight:800;margin:0 0 5px}.page-head p{color:#64748b;margin:0;font-size:.98rem}
-.hero{background:linear-gradient(115deg,#172554 0%,#3049a4 58%,#7957d5 100%);padding:32px 34px;border-radius:22px;color:#fff;box-shadow:0 15px 35px #243b8b20;margin-bottom:22px}
-.hero .eyebrow{font-size:.72rem;letter-spacing:.16em;font-weight:800;color:#dbe4ff;text-transform:uppercase}.hero h1{color:#fff;font-size:2.25rem;margin:9px 0 7px;font-weight:800}.hero p{color:#edf1ff;max-width:720px;margin:0;font-size:1rem;line-height:1.6}
-.section-label{font-size:1.12rem;font-weight:800;color:#172554;margin:24px 0 4px}.section-hint{font-size:.87rem;color:#748098;margin-bottom:13px}
-.panel{background:#fff;border:1px solid var(--line);border-radius:16px;padding:19px 20px;margin:10px 0;box-shadow:0 5px 18px #17255407}
-.panel-title{font-weight:800;color:#172554;font-size:1.02rem;margin-bottom:5px}.panel-subtitle{color:#748098;font-size:.86rem;margin-bottom:12px}
-.empty-state{background:#fff;border:1px dashed #cbd5e1;border-radius:16px;padding:32px 20px;text-align:center;margin:15px 0}.empty-icon{font-size:1.7rem;color:#6478d8}.empty-title{font-size:1.05rem;font-weight:800;color:#172554;margin:7px}.empty-copy{color:#748098;font-size:.9rem;max-width:560px;margin:auto}
-.concept-chip{display:inline-block;padding:8px 12px;border-radius:9px;background:#eef2ff;color:#354db0;font-weight:700;font-size:.82rem;margin:4px 5px 4px 0;border:1px solid #e0e7ff}
-.step-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;height:100%}.step-no{font-size:.72rem;font-weight:800;color:#6478d8;letter-spacing:.12em}.step-name{font-size:.98rem;font-weight:800;color:#172554;margin:7px 0 4px}.step-copy{font-size:.83rem;color:#748098;line-height:1.5}
-@media(max-width:700px){.block-container{padding:1rem}.hero{padding:23px}.hero h1{font-size:1.7rem}.page-head h1{font-size:1.7rem}}
-</style>''', unsafe_allow_html=True)
+st.markdown("""<style>
+:root {
+  --lt-bg: #f5f6f3;
+  --lt-surface: #ffffff;
+  --lt-ink: #202b2a;
+  --lt-muted: #687572;
+  --lt-accent: #3f6962;
+  --lt-accent-dark: #2f514c;
+  --lt-soft: #eaf0ed;
+  --lt-line: #dfe6e1;
+  --lt-gold: #a9824b;
+}
+html, body, [class*="css"] { font-family: Inter, "Segoe UI", Arial, sans-serif; }
+.stApp { background: var(--lt-bg); color: var(--lt-ink); }
+.block-container { max-width: 1180px; padding-top: 2.1rem; padding-bottom: 3rem; }
+[data-testid="stHeader"] { background: rgba(245,246,243,.96); }
+[data-testid="stSidebar"] { background: #202c2a; border-right: 1px solid #34413e; }
+[data-testid="stSidebar"] * { color: #f4f6f3; }
+[data-testid="stSidebar"] [data-testid="stRadio"] label { padding: 10px 12px; border-radius: 8px; font-weight: 600; }
+[data-testid="stSidebar"] [data-testid="stRadio"] label:hover { background: #ffffff12; }
+[data-testid="stSidebar"] hr { border-color: #46524f; }
+[data-testid="stMetric"] { background: var(--lt-surface); border: 1px solid var(--lt-line); border-radius: 10px; padding: 16px 18px; box-shadow: none; }
+[data-testid="stMetricLabel"] { color: var(--lt-muted); font-weight: 600; }
+[data-testid="stMetricValue"] { color: var(--lt-ink); font-weight: 750; }
+.stButton > button, .stFormSubmitButton > button { border: 1px solid var(--lt-accent); border-radius: 8px; padding: .58rem 1.05rem; font-weight: 650; color: #fff; background: var(--lt-accent); box-shadow: none; transition: background .15s ease, border-color .15s ease; }
+.stButton > button:hover, .stFormSubmitButton > button:hover { color: #fff; background: var(--lt-accent-dark); border-color: var(--lt-accent-dark); }
+[data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea, [data-baseweb="select"] > div { border: 1px solid #cbd5cf; border-radius: 7px; background: #fff; }
+[data-testid="stTextInput"] label, [data-testid="stTextArea"] label, [data-testid="stSelectbox"] label, [data-testid="stRadio"] label, [data-testid="stCheckbox"] label, .stMarkdown p, .stMarkdown li, [data-testid="stCaptionContainer"] { color: var(--lt-ink) !important; }
+[data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea, [data-baseweb="select"] *, [data-testid="stRadio"] *, [data-testid="stCheckbox"] * { color: #202b2a !important; }
+[data-testid="stTextInput"] input::placeholder, [data-testid="stTextArea"] textarea::placeholder { color: #687572 !important; opacity: 1 !important; }
+[data-testid="stSelectbox"] [data-baseweb="select"] > div { background: #fff !important; }
+[data-testid="stAlert"] p, [data-testid="stForm"] label { color: #202b2a !important; }
+[data-testid="stExpander"], [data-testid="stDataFrame"] { border: 1px solid var(--lt-line); border-radius: 9px; background: #fff; }
+hr { border-color: var(--lt-line); }
+h1, h2, h3 { color: var(--lt-ink); letter-spacing: -.025em; }
+.page-head { margin: 0 0 24px; }
+.kicker { color: var(--lt-accent); font-size: .7rem; font-weight: 750; letter-spacing: .14em; text-transform: uppercase; margin-bottom: 8px; }
+.page-head h1 { font-size: 2rem; font-weight: 750; margin: 0 0 6px; }
+.page-head p { color: var(--lt-muted); margin: 0; font-size: .96rem; }
+.hero { background: #e9efeb; border: 1px solid #d9e3dd; border-left: 4px solid var(--lt-accent); padding: 27px 30px; border-radius: 10px; color: var(--lt-ink); box-shadow: none; margin-bottom: 24px; }
+.hero .eyebrow { font-size: .69rem; letter-spacing: .14em; font-weight: 750; color: var(--lt-accent); text-transform: uppercase; }
+.hero h1 { color: var(--lt-ink); font-size: 2.05rem; margin: 8px 0 7px; font-weight: 750; }
+.hero p { color: #4e5e59; max-width: 760px; margin: 0; font-size: .98rem; line-height: 1.65; }
+.section-label { font-size: 1.08rem; font-weight: 750; color: var(--lt-ink); margin: 24px 0 4px; }
+.section-hint { font-size: .86rem; color: var(--lt-muted); margin-bottom: 13px; }
+.panel { background: var(--lt-surface); border: 1px solid var(--lt-line); border-radius: 10px; padding: 18px 19px; margin: 10px 0; box-shadow: none; }
+.panel-title { font-weight: 700; color: var(--lt-ink); font-size: 1rem; margin-bottom: 5px; }
+.panel-subtitle { color: var(--lt-muted); font-size: .85rem; margin-bottom: 12px; }
+.empty-state { background: #fff; border: 1px dashed #b9c8c0; border-radius: 10px; padding: 30px 20px; text-align: center; margin: 15px 0; }
+.empty-icon { font-size: 1.5rem; color: var(--lt-accent); }
+.empty-title { font-size: 1rem; font-weight: 700; color: var(--lt-ink); margin: 7px; }
+.empty-copy { color: var(--lt-muted); font-size: .88rem; max-width: 560px; margin: auto; }
+.concept-chip { display: inline-block; padding: 7px 11px; border-radius: 6px; background: var(--lt-soft); color: var(--lt-accent-dark); font-weight: 650; font-size: .8rem; margin: 4px 5px 4px 0; border: 1px solid #dce6df; }
+.step-card { background: #fff; border: 1px solid var(--lt-line); border-radius: 10px; padding: 16px; height: 100%; }
+.step-no { font-size: .7rem; font-weight: 750; color: var(--lt-gold); letter-spacing: .12em; }
+.step-name { font-size: .96rem; font-weight: 700; color: var(--lt-ink); margin: 7px 0 4px; }
+.step-copy { font-size: .83rem; color: var(--lt-muted); line-height: 1.55; }
+@media (max-width: 700px) { .block-container { padding: 1rem; } .hero { padding: 22px; } .hero h1, .page-head h1 { font-size: 1.65rem; } }
+</style>""", unsafe_allow_html=True)
 
 st.sidebar.markdown('''<div style="padding:18px 4px 20px"><div style="font-size:2.1rem">🎓</div>
 <div style="font-size:1.35rem;font-weight:800;letter-spacing:-.04em">LearnTube AI</div>
@@ -340,9 +380,13 @@ elif page == "Video Learning":
             video_id=youtube_video_id(url)
             if video_id:
                 try:
-                    with st.spinner("Extracting YouTube transcript..."): text=extract_transcript(video_id)
-                except Exception:
-                    st.warning("Automatic transcript extraction failed. Please paste the transcript manually.")
+                    with st.spinner("Connecting to YouTube and extracting available captions..."):
+                        text=extract_transcript(video_id)
+                except Exception as exc:
+                    st.error("YouTube did not provide captions to this app. This can happen when captions are disabled, the video is age/restriction protected, or YouTube blocks automated requests from Streamlit Cloud.")
+                    with st.expander("Technical details"):
+                        st.code(str(exc)[:1200])
+                    st.info("Open the YouTube video → Show transcript → copy the transcript → paste it in the box. The quiz feature will then work from that text.")
             else: st.error("Please enter a valid YouTube URL.")
         if text:
             st.session_state.transcript=clean_transcript(text)
@@ -361,6 +405,20 @@ elif page == "Video Learning":
             st.markdown(''.join(f'<span class="concept-chip">{c}</span>' for c in st.session_state.concepts),unsafe_allow_html=True)
         else: st.warning("No predefined concepts found in this transcript.")
         with st.expander("Read processed transcript"): st.write(st.session_state.transcript)
+        if st.session_state.concepts:
+            st.markdown('<div class="section-label">Create your quiz</div><div class="section-hint">Choose a detected concept. LearnTube AI will prepare transcript-based multiple-choice questions for the Quiz page.</div>',unsafe_allow_html=True)
+            chosen_topic = st.selectbox("Choose a concept for your quiz", st.session_state.concepts, key="video_quiz_topic")
+            if st.button("Generate quiz from this transcript", use_container_width=True, key="make_quiz_video"):
+                made_questions = generate_questions(st.session_state.transcript, chosen_topic, count=QUIZ_QUESTION_COUNT)
+                if made_questions:
+                    st.session_state.questions = made_questions
+                    st.session_state.quiz_topic = chosen_topic
+                    st.session_state.quiz_result = None
+                    st.session_state.quiz_number += 1
+                    st.success(f"Generated {len(made_questions)} transcript-based multiple-choice question(s). Open the Quiz page to answer them.")
+                else:
+                    st.warning("Not enough distinct transcript sentences mention this concept to create questions. Try another concept or a longer transcript.")
+            st.caption("Question method: transcript sentence completion (concept name is hidden and answer choices are generated from the supported concept list). This is template-based generation, not an external AI/LLM question generator.")
     else: empty_state("Your workspace is ready","Add a YouTube video or paste transcript text to begin.")
 
 # -------------------- Quiz --------------------
