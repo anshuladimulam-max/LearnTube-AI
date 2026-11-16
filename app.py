@@ -285,11 +285,17 @@ html, body, [class*="css"] { font-family: Inter, "Segoe UI", Arial, sans-serif; 
 .stApp { background: var(--lt-bg); color: var(--lt-ink); }
 .block-container { max-width: 1180px; padding-top: 2.1rem; padding-bottom: 3rem; }
 [data-testid="stHeader"] { background: rgba(245,246,243,.96); }
-[data-testid="stSidebar"] { background: #202c2a; border-right: 1px solid #34413e; }
-[data-testid="stSidebar"] * { color: #f4f6f3; }
-[data-testid="stSidebar"] [data-testid="stRadio"] label { padding: 10px 12px; border-radius: 8px; font-weight: 600; }
-[data-testid="stSidebar"] [data-testid="stRadio"] label:hover { background: #ffffff12; }
-[data-testid="stSidebar"] hr { border-color: #46524f; }
+[data-testid="stSidebar"] { background: #edf1ee; border-right: 1px solid #d6dfd9; }
+[data-testid="stSidebar"] *, [data-testid="stSidebar"] .stMarkdown,
+[data-testid="stSidebar"] .stMarkdown p,
+[data-testid="stSidebar"] [data-testid="stRadio"] label,
+[data-testid="stSidebar"] [data-testid="stRadio"] label * { color: #263431 !important; }
+[data-testid="stSidebar"] [data-testid="stRadio"] label { padding: 11px 12px; border-radius: 8px; font-weight: 650; background: transparent; }
+[data-testid="stSidebar"] [data-testid="stRadio"] label:hover { background: #dfe8e2; }
+[data-testid="stSidebar"] [data-testid="stRadio"] input:checked + div { color: #315e53 !important; }
+[data-testid="stSidebar"] [data-testid="stRadio"] [role="radio"] { border-color: #72847b !important; }
+[data-testid="stSidebar"] [data-testid="stRadio"] [role="radio"][aria-checked="true"] { background: #3f6962 !important; border-color: #3f6962 !important; }
+[data-testid="stSidebar"] hr { border-color: #d1dbd4; }
 [data-testid="stMetric"] { background: var(--lt-surface); border: 1px solid var(--lt-line); border-radius: 10px; padding: 16px 18px; box-shadow: none; }
 [data-testid="stMetricLabel"] { color: var(--lt-muted); font-weight: 600; }
 [data-testid="stMetricValue"] { color: var(--lt-ink); font-weight: 750; }
@@ -327,16 +333,25 @@ h1, h2, h3 { color: var(--lt-ink); letter-spacing: -.025em; }
 .step-name { font-size: .96rem; font-weight: 700; color: var(--lt-ink); margin: 7px 0 4px; }
 .step-copy { font-size: .83rem; color: var(--lt-muted); line-height: 1.55; }
 @media (max-width: 700px) { .block-container { padding: 1rem; } .hero { padding: 22px; } .hero h1, .page-head h1 { font-size: 1.65rem; } }
+/* Sidebar contrast safeguard: keep navigation text readable on the light sidebar. */
+[data-testid="stSidebar"] [data-testid="stRadio"] label,
+[data-testid="stSidebar"] [data-testid="stRadio"] label span,
+[data-testid="stSidebar"] [data-testid="stRadio"] label p,
+[data-testid="stSidebar"] [data-testid="stRadio"] label div { color: #263431 !important; }
+[data-testid="stSidebar"] [data-testid="stRadio"] [role="radio"] { outline-color: #72847b !important; }
+[data-testid="stSidebar"] [data-testid="stRadio"] [role="radio"][aria-checked="true"] { background: #3f6962 !important; border-color: #3f6962 !important; }
+[data-testid="stSidebar"] [data-testid="stRadio"] [role="radio"] svg { fill: #ffffff !important; color: #ffffff !important; }
+
 </style>""", unsafe_allow_html=True)
 
 st.sidebar.markdown('''<div style="padding:18px 4px 20px"><div style="font-size:2.1rem">🎓</div>
 <div style="font-size:1.35rem;font-weight:800;letter-spacing:-.04em">LearnTube AI</div>
-<div style="font-size:.78rem;color:#bdc9e8">ADAPTIVE VIDEO LEARNING</div></div>''', unsafe_allow_html=True)
+<div style="font-size:.78rem;color:#52645c">ADAPTIVE VIDEO LEARNING</div></div>''', unsafe_allow_html=True)
 st.sidebar.markdown('---')
-st.sidebar.markdown('<div style="font-size:.72rem;color:#9eadd0;letter-spacing:.13em;font-weight:800;padding:4px 10px 9px">WORKSPACE</div>', unsafe_allow_html=True)
+st.sidebar.markdown('<div style="font-size:.72rem;color:#52645c;letter-spacing:.13em;font-weight:800;padding:4px 10px 9px">WORKSPACE</div>', unsafe_allow_html=True)
 page = st.sidebar.radio("Navigation", ["Dashboard", "Video Learning", "Quiz", "Analytics", "About"], label_visibility="collapsed")
 st.sidebar.markdown('---')
-st.sidebar.markdown('<div style="padding:8px 10px;color:#aab8d8;font-size:.78rem;line-height:1.6">Learn smarter.<br>One video at a time.</div>', unsafe_allow_html=True)
+st.sidebar.markdown('<div style="padding:8px 10px;color:#52645c;font-size:.78rem;line-height:1.6">Learn smarter.<br>One video at a time.</div>', unsafe_allow_html=True)
 
 # -------------------- Dashboard --------------------
 if page == "Dashboard":
