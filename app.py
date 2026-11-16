@@ -10,6 +10,39 @@ from datetime import datetime, timezone
 
 st.set_page_config(page_title="LearnTube AI", page_icon="🎓", layout="wide")
 
+st.markdown("""<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
+:root { --lt-ink:#172554; --lt-muted:#64748b; --lt-blue:#3157d5; --lt-purple:#7656d6; --lt-line:#e5eaf4; }
+html, body, [class*="css"] { font-family:'DM Sans', sans-serif; }
+.stApp { background:linear-gradient(180deg,#f7f9ff 0%,#ffffff 360px); color:#172033; }
+.block-container { max-width:1180px; padding-top:2.1rem; padding-bottom:3rem; }
+[data-testid="stSidebar"] { background:linear-gradient(180deg,#111d42 0%,#1d2d60 100%); border-right:0; }
+[data-testid="stSidebar"] * { color:#f8faff !important; }
+[data-testid="stSidebar"] [data-testid="stRadio"] label { padding:9px 12px; border-radius:10px; }
+[data-testid="stSidebar"] [data-testid="stRadio"] label:hover { background:#ffffff18; }
+[data-testid="stSidebar"] hr { border-color:#ffffff30; }
+[data-testid="stMetric"] { background:#fff; border:1px solid var(--lt-line); border-radius:16px; padding:18px 20px; box-shadow:0 5px 18px #1e3a8a0a; }
+[data-testid="stMetricLabel"] { color:#64748b; font-weight:600; }
+[data-testid="stMetricValue"] { color:var(--lt-ink); font-weight:800; }
+.stButton > button, .stFormSubmitButton > button { border:0; border-radius:11px; padding:.62rem 1.2rem; font-weight:700; color:white; background:linear-gradient(100deg,var(--lt-blue),var(--lt-purple)); box-shadow:0 5px 14px #3157d52b; transition:transform .15s ease, box-shadow .15s ease; }
+.stButton > button:hover, .stFormSubmitButton > button:hover { color:white; transform:translateY(-1px); box-shadow:0 8px 18px #3157d540; }
+input, textarea, [data-baseweb="select"] > div { border-radius:10px !important; }
+[data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea { border:1px solid #dce3f0; background:#fff; }
+[data-testid="stExpander"] { border:1px solid var(--lt-line); border-radius:12px; background:#fff; }
+[data-testid="stDataFrame"] { border:1px solid var(--lt-line); border-radius:12px; overflow:hidden; }
+hr { border-color:var(--lt-line); }
+h1 { color:#172554; font-weight:800; letter-spacing:-.04em; }
+h2, h3 { color:#20315d; font-weight:700; letter-spacing:-.02em; }
+.lt-hero { background:linear-gradient(115deg,#172554 0%,#344db1 58%,#7656d6 100%); border-radius:22px; padding:30px 32px; color:#fff; margin:0 0 24px 0; box-shadow:0 12px 32px #243b8b25; }
+.lt-hero h1 { color:#fff !important; font-size:2.15rem; margin:0 0 8px 0; }
+.lt-hero p { color:#e8edff; font-size:1.02rem; margin:0; max-width:760px; }
+.lt-eyebrow { color:#cbd5ff; font-size:.76rem; font-weight:800; letter-spacing:.13em; text-transform:uppercase; margin-bottom:10px; }
+.lt-section { background:#fff; border:1px solid var(--lt-line); border-radius:16px; padding:18px 20px; margin:10px 0; box-shadow:0 5px 18px #1e3a8a08; }
+.lt-pill { display:inline-block; background:#edf2ff; color:#3157d5; padding:5px 10px; border-radius:999px; font-size:.78rem; font-weight:700; margin:3px 5px 3px 0; }
+@media (max-width: 700px) { .block-container { padding:1rem 1rem 2rem; } .lt-hero { padding:23px; } .lt-hero h1 { font-size:1.65rem; } }
+</style>
+""", unsafe_allow_html=True)
+
 # -------------------- Persistent GitHub analytics --------------------
 # Configure these values in Streamlit Community Cloud > App settings > Secrets:
 # GITHUB_TOKEN = "github_pat_..."
@@ -145,7 +178,7 @@ def generate_questions(transcript, selected, count=QUIZ_QUESTION_COUNT):
     if count < 1:
         return []
 
-    sentences = re.split(r"(?<=[.!?])\\s+", transcript)
+    sentences = re.split(r"(?<=[.!?])\s+", transcript)
     contexts = []
     seen = set()
 
@@ -218,20 +251,31 @@ for key, default in defaults.items():
     if key not in st.session_state:
         st.session_state[key] = default
 
-st.sidebar.title("🎓 LearnTube AI")
+st.sidebar.markdown("""
+<div style="padding:10px 2px 18px 2px">
+  <div style="font-size:2rem">🎓</div>
+  <div style="font-size:1.35rem;font-weight:800;letter-spacing:-.03em">LearnTube AI</div>
+  <div style="font-size:.78rem;color:#cbd5e1 !important">Adaptive Video Learning</div>
+</div>
+""", unsafe_allow_html=True)
+st.sidebar.markdown("---")
 page = st.sidebar.radio(
     "Navigation",
     ["Dashboard", "Video Learning", "Quiz", "Analytics", "About"]
 )
+st.sidebar.markdown("---")
+st.sidebar.caption("Learn smarter, one video at a time.")
 
 # -------------------- Dashboard --------------------
 if page == "Dashboard":
-    st.title("🎓 LearnTube AI")
-    st.subheader("Adaptive Learning Through Educational Videos")
-    st.write(
-        "Transform educational videos into structured learning experiences "
-        "with concept identification, quizzes and personalized recommendations."
-    )
+    st.markdown("""
+    <div class="lt-hero">
+      <div class="lt-eyebrow">YOUR PERSONAL LEARNING SPACE</div>
+      <h1>LearnTube AI</h1>
+      <p>Turn educational videos into structured learning. Explore key concepts, practise with transcript-based quizzes, and track your progress.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown("### Learning overview")
     col1, col2, col3 = st.columns(3)
     col1.metric("Concepts Identified", len(st.session_state.concepts))
     col2.metric("Transcript Chunks", len(st.session_state.chunks))
@@ -240,7 +284,12 @@ if page == "Dashboard":
         f"{st.session_state.score}%" if st.session_state.score is not None
         else "Not attempted"
     )
-    st.info("Go to Video Learning to submit a video or transcript.")
+    st.markdown("""
+    <div class="lt-section">
+      <strong>Ready to continue learning?</strong><br>
+      <span style="color:#64748b">Open Video Learning to add a YouTube video or paste its transcript. LearnTube AI will identify supported concepts and prepare a quiz.</span>
+    </div>
+    """, unsafe_allow_html=True)
 
 # -------------------- Video learning --------------------
 elif page == "Video Learning":
