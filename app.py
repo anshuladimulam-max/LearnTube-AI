@@ -9,7 +9,7 @@ import html
 import requests
 from datetime import datetime, timezone
 
-st.set_page_config(page_title="LearnTube AI",  layout="wide")
+st.set_page_config(page_title="LearnTube AI", page_icon=None, layout="wide")
 
 # -------------------- Persistent GitHub analytics --------------------
 # Configure these values in Streamlit Community Cloud > App settings > Secrets:
@@ -340,6 +340,29 @@ def _extract_overall_quiz_terms(transcript):
         "determines", "determine", "determined", "indicates", "indicate", "occurred",
         "happens", "happen", "formed", "forms", "form", "called", "known"
     }
+    # Filter common verbs and discourse connectors that otherwise create
+    # distractors such as "Classification predicts" or "model learns".
+    noisy.update({
+        "predict", "predicts", "predicted", "predicting", "learns", "learn",
+        "split", "splits", "contain", "contains", "estimate", "estimates",
+        "estimated", "update", "updates", "updated", "penalize", "penalizes",
+        "reduce", "reduces", "reduced", "perform", "performs", "performed",
+        "select", "selects", "selected", "lead", "leads", "create", "creates",
+        "created", "measure", "measures", "measured", "fit", "fits", "fitting",
+        "represent", "represents", "refer", "refers", "referring", "based",
+        "rather", "than", "allow", "allows", "allowing", "apply", "applies",
+        "applied", "calculate", "calculates", "calculated", "compare", "compares",
+        "compared", "identify", "identifies", "identified", "classify", "classifies",
+        "classifies", "group", "groups", "grouped", "include", "includes",
+        "included", "consist", "consists", "consisting", "result", "results",
+        "resulting", "depend", "depends", "depending", "occur", "occurs",
+        "occurred", "happen", "happens", "happened", "provide", "provides",
+        "provided", "explain", "explains", "explained", "describe", "describes",
+        "described", "discuss", "discusses", "discussed", "show", "shows", "shown",
+        "tell", "tells", "told", "call", "calls", "called", "know", "knows",
+        "known", "make", "makes", "made", "become", "becomes", "became",
+        "give", "gives", "given", "get", "gets", "got", "take", "takes", "taken",
+    })
     # These words may be ordinary language elsewhere, but are meaningful
     # technical vocabulary in educational transcripts and should be retained.
     noisy.difference_update({"learning", "training", "classification", "regression",
@@ -413,8 +436,16 @@ def _extract_overall_quiz_terms(transcript):
             pruned.append((score, count, size, key, label))
 
     results, seen = [], set()
+    generic_phrase_endings = {
+        "performance", "iterations", "value", "examples", "patterns",
+        "predictions", "line", "output", "process", "settings", "data",
+        "results", "information", "things", "way", "ways"
+    }
     for _, _, _, key, label in pruned:
         if key in seen:
+            continue
+        # Avoid turning ordinary descriptive fragments into answer choices.
+        if key.split()[-1] in generic_phrase_endings:
             continue
         results.append({"key": key, "label": label, "size": len(key.split())})
         seen.add(key)
@@ -424,11 +455,12 @@ def _extract_overall_quiz_terms(transcript):
 
 
 def generate_overall_questions(transcript, count=QUIZ_QUESTION_COUNT, previous_questions=None):
-    """Generate an overall transcript quiz without topic/category selection.
+    """Create varied concept-understanding MCQs from across the full transcript.
 
-    Candidate answer terms are extracted internally from the full transcript.
-    Questions are sampled in transcript order and use same-length source terms
-    as distractors. No detected-topic list is shown to the learner.
+    The learner is not asked to complete a sentence or fill a blank. Each item
+    presents a short explanation from the transcript and asks which concept,
+    method, or idea it describes. Contexts are selected across the beginning,
+    middle, and end of the transcript. No category selection is shown.
     """
     if not transcript or count < 1:
         return []
@@ -443,68 +475,125 @@ def generate_overall_questions(transcript, count=QUIZ_QUESTION_COUNT, previous_q
         for item in previous_questions if item.get("question")
     }
 
-    sentences = [re.sub(r"\s+", " ", part).strip()
-                 for part in re.split(r"(?<=[.!?])\s+|[\r\n]+", transcript)
-                 if part.strip()]
-    if len(sentences) <= 1:
-        words = transcript.split()
-        sentences = [" ".join(words[i:i + 36])
-                     for i in range(0, max(1, len(words) - 8), 22)]
-
-    # Build question candidates from complete transcript sentences. Each
-    # candidate is a source phrase, not a category or a learner-selected topic.
-    term_patterns = [(item, _phrase_regex(item["label"])) for item in terms]
-    candidates_by_context = []
-    for sentence_index, sentence in enumerate(sentences):
+    sentences = [
+        re.sub(r"\s+", " ", part).strip()
+        for part in re.split(r"(?<=[.!?])\s+|[\r\n]+", transcript)
+        if part.strip()
+    ]
+    # Captions often contain very long run-on lines. Split these into overlapping
+    # windows so question candidates are not limited to the start of the video.
+    expanded = []
+    for sentence in sentences:
         words = sentence.split()
-        if not (8 <= len(words) <= 55):
+        if len(words) > 55:
+            for i in range(0, len(words), 32):
+                chunk = " ".join(words[i:i + 48]).strip()
+                if 9 <= len(chunk.split()) <= 55:
+                    expanded.append(chunk)
+        elif 8 <= len(words) <= 55:
+            expanded.append(sentence)
+    if len(expanded) < 2:
+        words = transcript.split()
+        expanded = [" ".join(words[i:i + 48]) for i in range(0, max(1, len(words) - 8), 32)]
+
+    term_patterns = [(item, _phrase_regex(item["label"])) for item in terms]
+    candidates = []
+    seen_contexts = set()
+    for index, sentence in enumerate(expanded):
+        normalized_context = re.sub(r"\W+", " ", sentence.casefold()).strip()
+        if normalized_context in seen_contexts:
             continue
+        seen_contexts.add(normalized_context)
         matches = []
         for item, pattern in term_patterns:
             match = pattern.search(sentence)
             if match:
-                matches.append((item, match, len(item["key"].split())))
-        if matches:
-            matches.sort(key=lambda entry: (-entry[2], -len(entry[0]["key"]), entry[0]["key"]))
-            candidates_by_context.append((sentence_index, sentence, matches))
+                matches.append((item, match))
+        # A sentence with several extracted phrases can generate multiple
+        # possible questions, but each candidate is checked against prior sets.
+        matches.sort(key=lambda entry: (-entry[0]["size"], entry[0]["key"]))
+        for item, match in matches[:3]:
+            candidates.append((index, sentence, item, match))
 
-    if not candidates_by_context:
+    if not candidates:
         return []
 
     rng = random.Random(uuid.uuid4().int)
-    candidates_by_context.sort(key=lambda item: item[0])
-    # First pass covers distinct parts of the video. Further passes can use a
-    # second different source term from a sentence if the transcript is short.
-    ordered_contexts = candidates_by_context[:]
-    if len(ordered_contexts) > count:
-        positions = [round(i * (len(ordered_contexts) - 1) / max(1, count - 1)) for i in range(count)]
-        ordered_contexts = [ordered_contexts[pos] for pos in dict.fromkeys(positions)]
-    rng.shuffle(ordered_contexts)
+    # Spread selected contexts across the entire transcript instead of taking
+    # the first five usable sentences. Group candidates by transcript position.
+    candidates.sort(key=lambda item: item[0])
+    by_context = {}
+    for candidate in candidates:
+        by_context.setdefault(candidate[0], []).append(candidate)
+    contexts = list(by_context.values())
+    if len(contexts) > count:
+        selected_contexts = []
+        for slot in range(count):
+            left = round(slot * len(contexts) / count)
+            right = max(left + 1, round((slot + 1) * len(contexts) / count))
+            window = contexts[left:right]
+            if window:
+                selected_contexts.append(rng.choice(window))
+    else:
+        selected_contexts = contexts[:]
+    rng.shuffle(selected_contexts)
 
-    question_candidates = []
-    max_matches = max((len(item[2]) for item in ordered_contexts), default=1)
-    for match_rank in range(max_matches):
-        for _, sentence, matches in ordered_contexts:
-            if match_rank < len(matches):
-                question_candidates.append((sentence, matches[match_rank]))
+    # Different natural question stems avoid repetitive cloze/grammar exercises.
+    question_stems = [
+        "Which concept is being explained in this passage?",
+        "Which method or idea best matches the explanation below?",
+        "What concept is associated with the role described here?",
+        "Identify the concept that this explanation refers to.",
+        "Which term best represents the idea discussed in this passage?",
+    ]
 
     questions, seen_this_set, used_answer_terms = [], set(), set()
     all_terms = terms[:]
-    for sentence, answer_entry in question_candidates:
+    for context_group in selected_contexts:
         if len(questions) >= min(count, QUIZ_QUESTION_COUNT):
             break
-        if answer_entry[0]["key"] in used_answer_terms:
+        # Pick a candidate whose answer has not already been used in this set.
+        available = [candidate for candidate in context_group
+                     if candidate[2]["key"] not in used_answer_terms]
+        if not available:
             continue
-        answer_item, match, answer_size = answer_entry
-        answer = answer_item["label"]
-        masked = sentence[:match.start()] + "________" + sentence[match.end():]
-        question_text = "According to the video, which term completes this key idea?\n\n" + masked
-        fingerprint = re.sub(r"\W+", " ", question_text.casefold()).strip()
-        if fingerprint in used_questions or fingerprint in seen_this_set:
+        rng.shuffle(available)
+        chosen = None
+        for candidate in available:
+            _, sentence, answer_item, match = candidate
+            # Replace the named term with a neutral reference, not a blank.
+            # This preserves the explanatory context without testing English grammar.
+            label_words = answer_item["label"].split()
+            is_plural = bool(label_words) and label_words[-1].casefold().endswith("s") and not label_words[-1].casefold().endswith("ss")
+            replace_start = match.start()
+            prefix = sentence[:replace_start]
+            article_match = re.search(r"\b(a|an|the)\s+$", prefix, flags=re.IGNORECASE)
+            if article_match:
+                replace_start = article_match.start()
+            preceding = sentence[:replace_start].rstrip().casefold().split()
+            previous_word = preceding[-1] if preceding else ""
+            if is_plural and previous_word in {"over", "through", "during", "across"}:
+                replacement = "several steps"
+            elif is_plural:
+                replacement = "these systems"
+            else:
+                replacement = "this concept"
+            context = sentence[:replace_start] + replacement + sentence[match.end():]
+            context = re.sub(r"\s+", " ", context).strip()
+            if context:
+                context = context[0].upper() + context[1:]
+            stem = question_stems[len(questions) % len(question_stems)]
+            question_text = f"{stem}\n\n{context}"
+            fingerprint = re.sub(r"\W+", " ", question_text.casefold()).strip()
+            if fingerprint not in used_questions and fingerprint not in seen_this_set:
+                chosen = (answer_item, sentence, question_text, fingerprint)
+                break
+        if not chosen:
             continue
 
-        # Distractors come from the transcript too and are matched by phrase
-        # length to avoid unrelated fragments or obvious length clues.
+        answer_item, source_sentence, question_text, fingerprint = chosen
+        answer = answer_item["label"]
+        answer_size = answer_item["size"]
         pool = [item for item in all_terms
                 if item["key"] != answer_item["key"]
                 and item["key"] not in used_answer_terms
@@ -514,9 +603,12 @@ def generate_overall_questions(transcript, count=QUIZ_QUESTION_COUNT, previous_q
                     if item["key"] != answer_item["key"]
                     and item["key"] not in used_answer_terms]
         unique = []
+        seen_labels = {answer.casefold()}
         for item in pool:
-            if item["label"].casefold() not in {answer.casefold(), *(v.casefold() for v in unique)}:
-                unique.append(item["label"])
+            label = item["label"]
+            if label.casefold() not in seen_labels:
+                unique.append(label)
+                seen_labels.add(label.casefold())
             if len(unique) == 3:
                 break
         if len(unique) < 3:
@@ -528,7 +620,7 @@ def generate_overall_questions(transcript, count=QUIZ_QUESTION_COUNT, previous_q
             "question": question_text,
             "options": options,
             "answer": answer,
-            "source_context": sentence,
+            "source_context": source_sentence,
         })
         used_answer_terms.add(answer_item["key"])
         seen_this_set.add(fingerprint)
@@ -545,11 +637,33 @@ def ensure_current_quiz_sets_loaded():
         return
     try:
         all_sets, _ = load_quiz_sets()
-        st.session_state.quiz_sets = [item for item in all_sets if item.get("transcript_hash") == transcript_hash]
+        current_sets = []
+        for item in all_sets:
+            if item.get("transcript_hash") != transcript_hash:
+                continue
+            # Earlier versions generated fill-in-the-blank prompts. Keep those
+            # historical records in GitHub, but don't show them as current quizzes.
+            old_questions = item.get("questions", [])
+            is_legacy_cloze = any(
+                "________" in str(q.get("question", ""))
+                or "according to the video" in str(q.get("question", "")).casefold()
+                for q in old_questions
+            )
+            if not is_legacy_cloze:
+                current_sets.append(item)
+        st.session_state.quiz_sets = current_sets
         st.session_state.quiz_sets_storage_error = None
     except Exception as exc:
         # Keep this session usable even when GitHub storage is temporarily unavailable.
-        st.session_state.quiz_sets = [item for item in st.session_state.get("quiz_sets", []) if item.get("transcript_hash") == transcript_hash]
+        st.session_state.quiz_sets = [
+            item for item in st.session_state.get("quiz_sets", [])
+            if item.get("transcript_hash") == transcript_hash
+            and not any(
+                "________" in str(q.get("question", ""))
+                or "according to the video" in str(q.get("question", "")).casefold()
+                for q in item.get("questions", [])
+            )
+        ]
         st.session_state.quiz_sets_storage_error = str(exc)
     st.session_state.quiz_sets_loaded_for = transcript_hash
 
@@ -796,8 +910,7 @@ div[data-testid="stCode"] code,
 }
 </style>""", unsafe_allow_html=True)
 
-st.sidebar.markdown('''<div style="padding:18px 4px 20px"><div style="font-size:2.1rem">🎓</div>
-<div style="font-size:1.35rem;font-weight:800;letter-spacing:-.04em">LearnTube AI</div>
+st.sidebar.markdown('''<div style="padding:18px 4px 20px"><div style="font-size:1.35rem;font-weight:800;letter-spacing:-.04em">LearnTube AI</div>
 <div style="font-size:.78rem;color:#52645c">ADAPTIVE VIDEO LEARNING</div></div>''', unsafe_allow_html=True)
 st.sidebar.markdown('---')
 st.sidebar.markdown('<div style="font-size:.72rem;color:#52645c;letter-spacing:.13em;font-weight:800;padding:4px 10px 9px">WORKSPACE</div>', unsafe_allow_html=True)
