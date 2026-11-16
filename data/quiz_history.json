@@ -118,5 +118,77 @@
         "is_correct": true
       }
     ]
+  },
+  {
+    "attempt_id": "40dbe211-116e-4799-8c1e-c374ebd90f29",
+    "completed_at_utc": "2026-11-16T09:38:40.982832+00:00",
+    "video_title": "Pasted transcript",
+    "video_url": "",
+    "topic": "Deep Learning",
+    "score": 2,
+    "total": 5,
+    "percentage": 40,
+    "questions": [
+      {
+        "question": "something to learn something so for this you use something called as multi-layered neural networks so this is what ________ is it is a subset of machine learning its main aim is to mimic human brain so they actually create multi-layer neural network and this multi-layered neural network will basically help you to train the machines or applications whatever we are trying to create and deep learning has really really done an amazing work with the help of deep learning we are able to solve such a complex complex complex use cases that we will be probably discussing as",
+        "options": [
+          "Clustering",
+          "Linear Regression",
+          "Natural Language Processing",
+          "Deep Learning"
+        ],
+        "correct_answer": "Deep Learning",
+        "user_answer": "Natural Language Processing",
+        "is_correct": false
+      },
+      {
+        "question": "so here you can see that it is a part of this now let's go to the next one which is called called as ________ deep learning is again a subset of ml now let's consider why deep learning came into existence because in 1950s 60s scientists thought that can we make machine learn like how we human being learn so for that particular purpose deep learning came into existence here the plan is to basically mimic human brain so when I say mimicking human brain that basically means we are trying to mimic the human brain to implement",
+        "options": [
+          "Deep Learning",
+          "Clustering",
+          "Unsupervised Learning",
+          "Natural Language Processing"
+        ],
+        "correct_answer": "Deep Learning",
+        "user_answer": "Natural Language Processing",
+        "is_correct": false
+      },
+      {
+        "question": "use will definitely not give us local Minima but if in ________ techniques with that we are trying to use like Ann we have different different kind of optimizers which will solve that particular problem so that is the answer you basically have to give now let me go ahead and write with respect to the gradient descent algorithm so here again I'm going to write the gradient descent algorithm so this will be my gradient descent algorithm and remember guys gradient descent is an amazing algorithm and you you will definitely be using it so please make sure",
+        "options": [
+          "Natural Language Processing",
+          "Clustering",
+          "Deep Learning",
+          "Supervised Learning"
+        ],
+        "correct_answer": "Deep Learning",
+        "user_answer": "Supervised Learning",
+        "is_correct": false
+      },
+      {
+        "question": "AI artificial intelligence whatever role you are in you are as a machine learning developer you working as a ________ developer Vision developer or a data scientist or an AI engineer at the end of the day you are actually creating AI application so if I really want to Define what is this artificial intelligence you can just say that it is a process wherein we create some kind of applications in which it will be able to do its task without any human intervention so that basically means a person need not monitor this AI application automatically it'll",
+        "options": [
+          "Artificial Intelligence",
+          "Supervised Learning",
+          "Deep Learning",
+          "Classification"
+        ],
+        "correct_answer": "Deep Learning",
+        "user_answer": "Deep Learning",
+        "is_correct": true
+      },
+      {
+        "question": "we go ahead now if I come to data science see this is the thing guys if you want to say yourself as a data scientist tomorrow you given a business use case and situation comes that you probably have to solve that use case with the help of machine learning algorithms or ________ algorithms again the final goal is to create an AI application right you cannot say that I am a data scientist and I'll just work in machine learning I or I'll work in deep learning or I may I don't know how to analyze the",
+        "options": [
+          "Data Science",
+          "Deep Learning",
+          "Machine Learning",
+          "Unsupervised Learning"
+        ],
+        "correct_answer": "Deep Learning",
+        "user_answer": "Deep Learning",
+        "is_correct": true
+      }
+    ]
   }
 ]
