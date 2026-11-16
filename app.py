@@ -9,7 +9,7 @@ import html
 import requests
 from datetime import datetime, timezone
 
-st.set_page_config(page_title="LearnTube AI", page_icon="🎓", layout="wide")
+st.set_page_config(page_title="LearnTube AI",  layout="wide")
 
 # -------------------- Persistent GitHub analytics --------------------
 # Configure these values in Streamlit Community Cloud > App settings > Secrets:
