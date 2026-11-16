@@ -253,11 +253,13 @@ def split_transcript(text, size=100):
 
 
 def extract_transcript(video_id):
-    """Fetch captions once and stop immediately if YouTube blocks the cloud IP.
+    """Retrieve an English transcript using the stable legacy API first.
 
-    Streamlit Community Cloud runs this request from its own server IP, not the
-    learner's browser. Repeating the same request after RequestBlocked cannot
-    bypass YouTube's restriction, so fail fast with a useful message.
+    The deployment previously relied on youtube-transcript-api's requests-based
+    0.6.x interface. Pinning that interface avoids silently switching to the
+    newer 1.x HTTP client when Streamlit Cloud rebuilds the app. The function
+    still supports 1.x if the environment has it, but never repeats a request
+    after an explicit YouTube IP/rate-limit block.
     """
     from youtube_transcript_api import YouTubeTranscriptApi
 
@@ -274,54 +276,60 @@ def extract_transcript(video_id):
                 parts.append(str(value))
         return clean_transcript(" ".join(parts))
 
-    api = YouTubeTranscriptApi()
-    try:
-        # Current youtube-transcript-api interface (v1.x).
-        fetched = api.fetch(video_id, languages=["en", "en-US", "en-GB"])
-        transcript = snippets_to_text(fetched)
-        if transcript:
-            return transcript
-        raise RuntimeError("The video returned an empty English caption track.")
-    except Exception as exc:
-        message = str(exc)
-        error_name = type(exc).__name__
-        combined = f"{error_name}: {message}".lower()
-
-        # Do not retry if the server IP is blocked. A second API call will be
-        # sent from the same IP and only creates duplicate errors / delays.
-        if any(marker in combined for marker in (
+    def is_blocked(exc):
+        message = f"{type(exc).__name__}: {exc}".lower()
+        return any(marker in message for marker in (
             "requestblocked", "ip blocked", "blocking requests from your ip",
-            "too many requests", "http 429", "forbidden", "http 403"
-        )):
+            "too many requests", "http 429", "status code 429",
+            "forbidden", "http 403", "status code 403"
+        ))
+
+    errors = []
+
+    # Preferred path: requests-based API used by the earlier working build.
+    legacy_get = getattr(YouTubeTranscriptApi, "get_transcript", None)
+    if callable(legacy_get):
+        try:
+            snippets = legacy_get(video_id, languages=["en", "en-US", "en-GB"])
+            transcript = snippets_to_text(snippets)
+            if transcript:
+                return transcript
+            errors.append("The English caption track was empty.")
+        except Exception as exc:
+            if is_blocked(exc):
+                raise RuntimeError(
+                    "YOUTUBE_REQUEST_BLOCKED: YouTube refused the caption request "
+                    "from this server. The video ID is valid, but the hosting IP "
+                    "is temporarily restricted. Please try again later or use the "
+                    "transcript upload/paste option."
+                ) from None
+            errors.append(f"Legacy transcript API: {type(exc).__name__}: {exc}")
+
+    # Compatibility path for youtube-transcript-api 1.x installations.
+    try:
+        api = YouTubeTranscriptApi()
+        fetch = getattr(api, "fetch", None)
+        if callable(fetch):
+            snippets = fetch(video_id, languages=["en", "en-US", "en-GB"])
+            transcript = snippets_to_text(snippets)
+            if transcript:
+                return transcript
+            errors.append("The English caption track was empty.")
+    except Exception as exc:
+        if is_blocked(exc):
             raise RuntimeError(
-                "YOUTUBE_CLOUD_BLOCK: YouTube blocked caption requests from the "
-                "Streamlit Cloud server. The URL is valid, but server-side "
-                "caption access is unavailable for this deployment."
+                "YOUTUBE_REQUEST_BLOCKED: YouTube refused the caption request "
+                "from this server. The video ID is valid, but the hosting IP "
+                "is temporarily restricted. Please try again later or use the "
+                "transcript upload/paste option."
             ) from None
+        errors.append(f"Current transcript API: {type(exc).__name__}: {exc}")
 
-        # A small compatibility fallback for older package versions only.
-        legacy_fetch = getattr(YouTubeTranscriptApi, "get_transcript", None)
-        if callable(legacy_fetch):
-            try:
-                fetched = legacy_fetch(video_id, languages=["en", "en-US", "en-GB"])
-                transcript = snippets_to_text(fetched)
-                if transcript:
-                    return transcript
-            except Exception as legacy_exc:
-                legacy_text = str(legacy_exc).lower()
-                if any(marker in legacy_text for marker in (
-                    "requestblocked", "ip blocked", "blocking requests from your ip",
-                    "too many requests", "http 429", "forbidden", "http 403"
-                )):
-                    raise RuntimeError(
-                        "YOUTUBE_CLOUD_BLOCK: YouTube blocked caption requests from "
-                        "the Streamlit Cloud server. Use a transcript file or paste text."
-                    ) from None
-
-        raise RuntimeError(
-            "CAPTIONS_UNAVAILABLE: No usable English captions could be retrieved. "
-            "Captions may be disabled, restricted, or unavailable for this video."
-        ) from None
+    detail = " | ".join(errors[-2:])
+    raise RuntimeError(
+        "CAPTIONS_UNAVAILABLE: No English transcript could be retrieved. "
+        "Check that captions are enabled for this video. " + detail
+    )
 
 def _concept_regex(concept):
     # Allow normal spaces or hyphens between words, with word boundaries.
