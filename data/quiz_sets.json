@@ -201,5 +201,71 @@
         "source_context": "write this in a easy way okay so this will be derivative of theta J and remember J will be 0 and 1 right because we need to find out for 0 Theta 0 and Theta 1 so this will be 1 by 2 m what is what"
       }
     ]
+  },
+  {
+    "set_id": "481e3674-0854-4618-a122-9b4c039b9531",
+    "set_number": 1,
+    "created_at_utc": "2026-11-17T03:58:55.457542+00:00",
+    "transcript_hash": "9be8b57c32db8400adbfed25848548a659d333093dfcfd9227e6893f02eee0ed",
+    "video_title": "Pasted transcript",
+    "video_url": "",
+    "question_count": 5,
+    "questions": [
+      {
+        "question": "Which concept is being explained in this passage?\n\nThis concept I have to first of all execute this then only it will be able to press shift tab so here if I press shift tab here you'll be able to see estimator and parameter grid is my second parameter then scoring and then all the",
+        "options": [
+          "press shift tab",
+          "binary classification problem",
+          "linear regression now",
+          "derivative of theta"
+        ],
+        "answer": "press shift tab",
+        "source_context": "press shift tab I have to first of all execute this then only it will be able to press shift tab so here if I press shift tab here you'll be able to see estimator and parameter grid is my second parameter then scoring and then all the"
+      },
+      {
+        "question": "Which method or idea best matches the explanation below?\n\nThetas when you have many number of features and when you have many number of features that basically means you'll have multiple slopes right those features that are not this concept or that has no contribution in finding out your output that coefficient value will be almost nil",
+        "options": [
+          "performing well",
+          "particular point",
+          "definitely write",
+          "convergence algorithm"
+        ],
+        "answer": "performing well",
+        "source_context": "thetas when you have many number of features and when you have many number of features that basically means you'll have multiple slopes right those features that are not performing well or that has no contribution in finding out your output that coefficient value will be almost nil"
+      },
+      {
+        "question": "What concept is associated with the role described here?\n\nThen I'm actually able to find out the prediction and this is specifically my output okay this is this concept see this code okay this code is a huge code I have actually taken this code directly from the SK learn page of Silo if you go and",
+        "options": [
+          "done now",
+          "convergence algorithm",
+          "definitely write",
+          "particular point"
+        ],
+        "answer": "done now",
+        "source_context": "then I'm actually able to find out the prediction and this is specifically my output okay this is done now see this code okay this code is a huge code I have actually taken this code directly from the SK learn page of Silo if you go and"
+      },
+      {
+        "question": "Identify the concept that this explanation refers to.\n\nThat is the reason the maths is so complex inside this if I talk about decision tree this is basically this concept because in decision tree we know how the split are basically happening with the help of paper and pen you'll be able to do",
+        "options": [
+          "linear regression now",
+          "white box model",
+          "derivative of theta",
+          "binary classification problem"
+        ],
+        "answer": "white box model",
+        "source_context": "that is the reason the maths is so complex inside this if I talk about decision tree this is basically a white box model because in decision tree we know how the split are basically happening with the help of paper and pen you'll be able to do"
+      },
+      {
+        "question": "Which term best represents the idea discussed in this passage?\n\nSo today's session what all things we are basically going to discuss so first of all we going to discuss about different this concept algorithm like how many different types of machine learning algor understand the purpose of taking this session is to clear the interviews",
+        "options": [
+          "cluster sum of square",
+          "weak learner weak learner",
+          "house pricing data set",
+          "types of machine learning"
+        ],
+        "answer": "types of machine learning",
+        "source_context": "so today's session what all things we are basically going to discuss so first of all we going to discuss about different types of machine learning algorithm like how many different types of machine learning algor understand the purpose of taking this session is to clear the interviews"
+      }
+    ]
   }
 ]
