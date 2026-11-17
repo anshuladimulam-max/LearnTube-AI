@@ -626,5 +626,78 @@
         "is_correct": false
       }
     ]
+  },
+  {
+    "attempt_id": "8a4904a7-d276-451b-8fa9-f5140bdc06bd",
+    "quiz_set_id": "481e3674-0854-4618-a122-9b4c039b9531",
+    "completed_at_utc": "2026-11-17T04:44:21.707154+00:00",
+    "video_title": "Pasted transcript",
+    "video_url": "",
+    "topic": "Entire video",
+    "score": 1,
+    "total": 5,
+    "percentage": 20,
+    "questions": [
+      {
+        "question": "Which concept is being explained in this passage?\n\nThis concept I have to first of all execute this then only it will be able to press shift tab so here if I press shift tab here you'll be able to see estimator and parameter grid is my second parameter then scoring and then all the",
+        "options": [
+          "press shift tab",
+          "binary classification problem",
+          "linear regression now",
+          "derivative of theta"
+        ],
+        "correct_answer": "press shift tab",
+        "user_answer": "binary classification problem",
+        "is_correct": false
+      },
+      {
+        "question": "Which method or idea best matches the explanation below?\n\nThetas when you have many number of features and when you have many number of features that basically means you'll have multiple slopes right those features that are not this concept or that has no contribution in finding out your output that coefficient value will be almost nil",
+        "options": [
+          "performing well",
+          "particular point",
+          "definitely write",
+          "convergence algorithm"
+        ],
+        "correct_answer": "performing well",
+        "user_answer": "convergence algorithm",
+        "is_correct": false
+      },
+      {
+        "question": "What concept is associated with the role described here?\n\nThen I'm actually able to find out the prediction and this is specifically my output okay this is this concept see this code okay this code is a huge code I have actually taken this code directly from the SK learn page of Silo if you go and",
+        "options": [
+          "done now",
+          "convergence algorithm",
+          "definitely write",
+          "particular point"
+        ],
+        "correct_answer": "done now",
+        "user_answer": "done now",
+        "is_correct": true
+      },
+      {
+        "question": "Identify the concept that this explanation refers to.\n\nThat is the reason the maths is so complex inside this if I talk about decision tree this is basically this concept because in decision tree we know how the split are basically happening with the help of paper and pen you'll be able to do",
+        "options": [
+          "linear regression now",
+          "white box model",
+          "derivative of theta",
+          "binary classification problem"
+        ],
+        "correct_answer": "white box model",
+        "user_answer": "derivative of theta",
+        "is_correct": false
+      },
+      {
+        "question": "Which term best represents the idea discussed in this passage?\n\nSo today's session what all things we are basically going to discuss so first of all we going to discuss about different this concept algorithm like how many different types of machine learning algor understand the purpose of taking this session is to clear the interviews",
+        "options": [
+          "cluster sum of square",
+          "weak learner weak learner",
+          "house pricing data set",
+          "types of machine learning"
+        ],
+        "correct_answer": "types of machine learning",
+        "user_answer": "cluster sum of square",
+        "is_correct": false
+      }
+    ]
   }
 ]
